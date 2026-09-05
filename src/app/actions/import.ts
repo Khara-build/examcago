@@ -32,6 +32,10 @@ export interface ValidationReport {
   canImport: boolean;
 }
 
+function normalizeText(text: string): string {
+  return text.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
 export async function parseAndValidateImportAction(formData: FormData): Promise<{ report?: ValidationReport; error?: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -45,35 +49,18 @@ export async function parseAndValidateImportAction(formData: FormData): Promise<
   const file = formData.get('file') as File;
   if (!file) return { error: 'No file uploaded.' };
 
+  // File size security guard (Max 20 MB)
+  const MAX_FILE_SIZE = 20 * 1024 * 1024;
+  if (file.size > MAX_FILE_SIZE) {
+    return { error: 'File size exceeds the 20 MB limit. Please split the file into smaller batches.' };
+  }
+
   const fileName = file.name;
   const fileExt = fileName.split('.').pop()?.toLowerCase() || '';
 
   if (!['xlsx', 'xls', 'csv', 'json'].includes(fileExt)) {
     return { error: 'Unsupported file format. Please upload an Excel (.xlsx), CSV, or JSON file.' };
   }
-
-  // Fetch all existing subjects, chapters, and questions for validation & duplicate checking
-  const { data: subjects } = await adminClient.from('subjects').select('id, name, code, slug');
-  const { data: chapters } = await adminClient.from('chapters').select('id, name, subject_id');
-  const { data: existingQuestions } = await adminClient.from('questions').select('id, subject_id, chapter_id, question_text');
-
-  const subjectMap = new Map<string, { id: string; name: string }>(); // lowercase name/code -> subject
-  subjects?.forEach((s) => {
-    subjectMap.set(s.name.toLowerCase().trim(), { id: s.id, name: s.name });
-    subjectMap.set(s.code.toLowerCase().trim(), { id: s.id, name: s.name });
-  });
-
-  const chapterMap = new Map<string, string>(); // "subjectId:chapterNameLower" -> chapterId
-  chapters?.forEach((c) => {
-    chapterMap.set(`${c.subject_id}:${c.name.toLowerCase().trim()}`, c.id);
-  });
-
-  // DB Question text lookup map for duplicate checking: "subjectId:chapterId:questionTextLower" -> true
-  const dbQuestionSet = new Set<string>();
-  existingQuestions?.forEach((q) => {
-    const key = `${q.subject_id}:${q.chapter_id || 'none'}:${q.question_text.toLowerCase().trim()}`;
-    dbQuestionSet.add(key);
-  });
 
   const buffer = await file.arrayBuffer();
   let rawRows: any[] = [];
@@ -99,6 +86,66 @@ export async function parseAndValidateImportAction(formData: FormData): Promise<
 
   if (rawRows.length === 0) {
     return { error: 'The uploaded file contains no data rows.' };
+  }
+
+  if (rawRows.length > 10000) {
+    return { error: 'Uploaded file contains over 10,000 rows. Please split into batches of up to 10,000 questions.' };
+  }
+
+  // Fetch all existing subjects and chapters for validation
+  const { data: subjects } = await adminClient.from('subjects').select('id, name, code, slug');
+  const { data: chapters } = await adminClient.from('chapters').select('id, name, subject_id');
+
+  const subjectMap = new Map<string, { id: string; name: string }>(); // lowercase name/code -> subject
+  subjects?.forEach((s) => {
+    subjectMap.set(s.name.toLowerCase().trim(), { id: s.id, name: s.name });
+    subjectMap.set(s.code.toLowerCase().trim(), { id: s.id, name: s.name });
+  });
+
+  const chapterMap = new Map<string, string>(); // "subjectId:chapterNameLower" -> chapterId
+  chapters?.forEach((c) => {
+    chapterMap.set(`${c.subject_id}:${c.name.toLowerCase().trim()}`, c.id);
+  });
+
+  // Identify relevant subject IDs present in uploaded file to optimize duplicate checking
+  const relevantSubjectIds = new Set<string>();
+  rawRows.forEach((row) => {
+    const sName = String(row['Subject'] || row['subject'] || '').trim().toLowerCase();
+    const match = subjectMap.get(sName);
+    if (match) relevantSubjectIds.add(match.id);
+  });
+
+  // Fetch existing questions with range-pagination to overcome PostgREST 1,000 row limit
+  const dbQuestionSet = new Set<string>();
+  if (relevantSubjectIds.size > 0) {
+    const targetSubjectIds = Array.from(relevantSubjectIds);
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+      const { data: qBatch, error: qErr } = await adminClient
+        .from('questions')
+        .select('subject_id, chapter_id, question_text')
+        .in('subject_id', targetSubjectIds)
+        .range(from, to);
+
+      if (qErr || !qBatch || qBatch.length === 0) {
+        hasMore = false;
+      } else {
+        qBatch.forEach((q) => {
+          const key = `${q.subject_id}:${q.chapter_id || 'none'}:${normalizeText(q.question_text)}`;
+          dbQuestionSet.add(key);
+        });
+        if (qBatch.length < pageSize) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+    }
   }
 
   const validRows: ValidatedImportRow[] = [];
@@ -160,7 +207,8 @@ export async function parseAndValidateImportAction(formData: FormData): Promise<
 
     let isDuplicate = false;
     if (errors.length === 0 && subjectId && questionText) {
-      const questionKey = `${subjectId}:${chapterId || 'none'}:${questionText.toLowerCase()}`;
+      const normalizedQ = normalizeText(questionText);
+      const questionKey = `${subjectId}:${chapterId || 'none'}:${normalizedQ}`;
 
       // Check intra-file duplicate
       if (fileSeenQuestions.has(questionKey)) {
@@ -231,6 +279,8 @@ export async function executeConfirmedImportAction(
   if (!user) return { error: 'Authentication required.' };
 
   const adminClient = createAdminClient();
+  const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).single();
+  if (profile?.role !== 'admin') return { error: 'Admin privileges required.' };
 
   if (!rows || rows.length === 0) {
     return { error: 'No valid rows provided for import.' };
@@ -251,7 +301,7 @@ export async function executeConfirmedImportAction(
   }));
 
   try {
-    // Attempt Atomic Import via Supabase RPC function `import_mcq_batch`
+    // Atomic Import via Supabase RPC function `import_mcq_batch`
     const { data: rpcRes, error: rpcErr } = await adminClient.rpc('import_mcq_batch', {
       p_admin_id: user.id,
       p_file_name: fileName,
@@ -263,7 +313,26 @@ export async function executeConfirmedImportAction(
       p_rows: batchPayload,
     });
 
-    if (!rpcErr && rpcRes?.success) {
+    if (rpcErr) {
+      console.error('RPC import_mcq_batch failed:', rpcErr);
+      // Record failure audit entry atomically
+      await adminClient.from('bulk_imports').insert({
+        admin_id: user.id,
+        file_name: fileName,
+        file_type: fileType,
+        total_rows: totalRowsCount,
+        valid_rows: rows.length,
+        invalid_rows: invalidRowsCount,
+        duplicate_rows: duplicateRowsCount,
+        imported_rows: 0,
+        status: 'failed',
+        error_log: [{ error: rpcErr.message }],
+      });
+      revalidatePath('/admin/imports');
+      return { error: `Database import transaction rolled back: ${rpcErr.message}` };
+    }
+
+    if (rpcRes?.success) {
       revalidatePath('/admin/questions');
       revalidatePath('/admin/imports');
       return {
@@ -271,75 +340,10 @@ export async function executeConfirmedImportAction(
         importedCount: rpcRes.imported_count || rows.length,
       };
     }
-  } catch (err) {
-    // Fallback batch execution if RPC is not yet created in remote DB
+
+    return { error: 'Import failed with unknown database response.' };
+  } catch (err: any) {
+    console.error('Error invoking import_mcq_batch:', err);
+    return { error: `Import failed: ${err.message || 'Unknown database error'}` };
   }
-
-  // Fallback Batch Execution
-  let importedCount = 0;
-  const errorsLog: any[] = [];
-
-  for (const row of rows) {
-    try {
-      const { data: qData, error: qErr } = await adminClient
-        .from('questions')
-        .insert({
-          subject_id: row.subjectId,
-          chapter_id: row.chapterId,
-          question_text: row.questionText,
-          question_type: 'mcq',
-          marks: row.marks,
-          explanation: row.explanation || null,
-          is_active: true,
-        })
-        .select('id')
-        .single();
-
-      if (qErr || !qData) {
-        errorsLog.push({ row: row.rowNumber, error: qErr?.message || 'Failed to insert question' });
-        continue;
-      }
-
-      const options = [
-        { question_id: qData.id, option_letter: 'A', option_text: row.optionA, is_correct: row.correctAnswer === 'A' },
-        { question_id: qData.id, option_letter: 'B', option_text: row.optionB, is_correct: row.correctAnswer === 'B' },
-        { question_id: qData.id, option_letter: 'C', option_text: row.optionC, is_correct: row.correctAnswer === 'C' },
-        { question_id: qData.id, option_letter: 'D', option_text: row.optionD, is_correct: row.correctAnswer === 'D' },
-      ];
-
-      const { error: optErr } = await adminClient.from('question_options').insert(options);
-      if (optErr) {
-        await adminClient.from('questions').delete().eq('id', qData.id);
-        errorsLog.push({ row: row.rowNumber, error: optErr.message });
-        continue;
-      }
-
-      importedCount++;
-    } catch (e: any) {
-      errorsLog.push({ row: row.rowNumber, error: e.message });
-    }
-  }
-
-  // Record Audit Entry
-  await adminClient.from('bulk_imports').insert({
-    admin_id: user.id,
-    file_name: fileName,
-    file_type: fileType,
-    total_rows: totalRowsCount,
-    valid_rows: rows.length,
-    invalid_rows: invalidRowsCount,
-    duplicate_rows: duplicateRowsCount,
-    imported_rows: importedCount,
-    status: importedCount > 0 ? 'completed' : 'failed',
-    error_log: errorsLog,
-  });
-
-  revalidatePath('/admin/questions');
-  revalidatePath('/admin/imports');
-
-  return {
-    success: true,
-    importedCount,
-    failedCount: errorsLog.length,
-  };
 }

@@ -45,7 +45,7 @@ export async function loginAction(formData: FormData) {
       return { error: error.message };
     }
 
-    redirect(redirectTo);
+    return { success: true, redirectTo };
   } catch (err: any) {
     if (isRedirectError(err)) throw err;
     console.error('[Auth Login Exception]:', err);
@@ -216,3 +216,69 @@ export async function logoutAction() {
   }
   redirect('/login');
 }
+
+export async function requestPasswordResetAction(formData: FormData) {
+  const email = (formData.get('email') as string || '').trim().toLowerCase();
+
+  const gmailRegex = /^[a-zA-Z0-9._%+-]+@gmail\.com$/i;
+  if (!email || !gmailRegex.test(email)) {
+    return { error: 'Please enter a valid @gmail.com address.' };
+  }
+
+  try {
+    const supabase = await createClient();
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const redirectTo = `${siteUrl}/auth/callback?next=/auth/reset-password`;
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+
+    if (error) {
+      console.error('[Auth Reset Password Error]:', error.message);
+      return { error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Auth Reset Password Exception]:', err);
+    return { error: 'Failed to send recovery email. Please try again.' };
+  }
+}
+
+export async function updatePasswordAction(formData: FormData) {
+  const password = (formData.get('password') as string || '');
+  const confirmPassword = (formData.get('confirmPassword') as string || '');
+
+  if (!password || password.length < 6) {
+    return { error: 'Password must be at least 6 characters long.' };
+  }
+
+  if (password !== confirmPassword) {
+    return { error: 'Both passwords must match.' };
+  }
+
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { error: 'No active recovery session found. Please click the reset link in your email again.' };
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      password,
+    });
+
+    if (error) {
+      console.error('[Auth Update Password Error]:', error.message);
+      return { error: error.message };
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error('[Auth Update Password Exception]:', err);
+    return { error: 'Failed to update password. Please try again.' };
+  }
+}
+

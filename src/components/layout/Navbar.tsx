@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { BookOpen, Coins, User, LogOut, Menu, X, Shield, History } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { logoutAction } from '@/app/actions/auth';
 
 interface NavbarProps {
   user?: {
@@ -105,7 +106,7 @@ export function Navbar({ user, tokens = 0, onLogout }: NavbarProps) {
                   </span>
                 </Link>
 
-                {onLogout && (
+                {onLogout ? (
                   <button
                     onClick={onLogout}
                     title="Sign Out"
@@ -113,6 +114,16 @@ export function Navbar({ user, tokens = 0, onLogout }: NavbarProps) {
                   >
                     <LogOut className="h-4 w-4" />
                   </button>
+                ) : (
+                  <form action={logoutAction}>
+                    <button
+                      type="submit"
+                      title="Sign Out"
+                      className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                    </button>
+                  </form>
                 )}
               </div>
             </div>
@@ -202,10 +213,16 @@ export function Navbar({ user, tokens = 0, onLogout }: NavbarProps) {
               )}
               <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
                 <span className="text-xs text-gray-500 truncate">{user.email}</span>
-                {onLogout && (
+                {onLogout ? (
                   <Button variant="danger" size="sm" onClick={onLogout}>
                     Sign Out
                   </Button>
+                ) : (
+                  <form action={logoutAction}>
+                    <Button variant="danger" size="sm" type="submit">
+                      Sign Out
+                    </Button>
+                  </form>
                 )}
               </div>
             </>

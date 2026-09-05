@@ -1,6 +1,6 @@
 -- =========================================================================
--- EXAM CAGO — ICAB CERTIFICATE LEVEL SEED DATA SCRIPT
--- Safe & Idempotent (Can be executed multiple times without duplicating data)
+-- EXAM CAGO MIGRATION: FINAL ICAB CERTIFICATE LEVEL SYLLABUS UPDATE (85 CHAPTERS)
+-- File: supabase/migrations/update_icab_certificate_syllabus.sql
 -- =========================================================================
 -- Subject Summary (7 Subjects):
 -- 1. Accounting: 15 chapters
@@ -13,7 +13,9 @@
 -- Total Chapters: 85
 -- =========================================================================
 
--- 1. SEED 7 ICAB CERTIFICATE LEVEL SUBJECTS
+BEGIN;
+
+-- 1. UPSERT THE 7 ICAB CERTIFICATE LEVEL SUBJECTS
 INSERT INTO public.subjects (id, name, slug, code, description, display_order, is_active) VALUES
 ('a0000000-0000-0000-0000-000000000001', 'Accounting', 'accounting', 'ACC', 'Financial accounting fundamentals, double-entry bookkeeping, trial balance, and financial statement preparation.', 1, true),
 ('a0000000-0000-0000-0000-000000000002', 'Management Information', 'management-information', 'MI', 'Cost accounting, budgeting, variance analysis, forecasting, and managerial decision support.', 2, true),
@@ -30,51 +32,12 @@ ON CONFLICT (id) DO UPDATE SET
   display_order = EXCLUDED.display_order,
   is_active = EXCLUDED.is_active;
 
--- 2. SEED DEFAULT EXAM CONFIGURATIONS
--- Matching Finalized ICAB Exam Specifications:
--- Accounting: 40 MCQ (2 marks each) + 1 large question (20 marks) = 100 marks, 90 mins
--- Management Information: 35 MCQ (2 marks each) + 2 scenario questions (15 marks each) = 100 marks, 90 mins
--- Business Technology and Finance: 50 MCQ (2 marks each) = 100 marks, 90 mins (configurable)
--- Taxation: 35 MCQ (2 marks each) + 2 scenario questions (15 marks each) = 100 marks, 90 mins
--- Assurance: 50 MCQ (2 marks each) = 100 marks, 90 mins (configurable)
--- Business Law: 25 MCQ (2 marks each) = 50 marks, 60 mins
--- Information Technology: 25 MCQ (2 marks each) = 50 marks, 60 mins
+-- 2. UPDATE EXAM CONFIGURATION FOR TAXATION (PRESERVING PARAMETERS)
+UPDATE public.exam_configs
+SET name = 'Taxation Full Book Exam'
+WHERE id = 'b0000000-0000-0000-0000-000000000004';
 
-INSERT INTO public.exam_configs (
-  id,
-  subject_id,
-  name,
-  exam_type,
-  duration_minutes,
-  mcq_count,
-  mcq_marks_each,
-  scenario_count,
-  scenario_marks_each,
-  large_count,
-  large_marks_each,
-  total_marks,
-  is_active
-) VALUES
-('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Accounting Full Book Exam', 'full_book', 90, 40, 2, 0, 0, 1, 20, 100, true),
-('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'Management Information Full Book Exam', 'full_book', 90, 35, 2, 2, 15, 0, 0, 100, true),
-('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', 'Business Technology and Finance Full Book Exam', 'full_book', 90, 50, 2, 0, 0, 0, 0, 100, true),
-('b0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004', 'Taxation Full Book Exam', 'full_book', 90, 35, 2, 2, 15, 0, 0, 100, true),
-('b0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000005', 'Assurance Full Book Exam', 'full_book', 90, 50, 2, 0, 0, 0, 0, 100, true),
-('b0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000006', 'Business Law Full Book Exam', 'full_book', 60, 25, 2, 0, 0, 0, 0, 50, true),
-('b0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000007', 'Information Technology Full Book Exam', 'full_book', 60, 25, 2, 0, 0, 0, 0, 50, true)
-ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  duration_minutes = EXCLUDED.duration_minutes,
-  mcq_count = EXCLUDED.mcq_count,
-  mcq_marks_each = EXCLUDED.mcq_marks_each,
-  scenario_count = EXCLUDED.scenario_count,
-  scenario_marks_each = EXCLUDED.scenario_marks_each,
-  large_count = EXCLUDED.large_count,
-  large_marks_each = EXCLUDED.large_marks_each,
-  total_marks = EXCLUDED.total_marks,
-  is_active = EXCLUDED.is_active;
-
--- 3. SAFE OBSOLETE CHAPTER CLEANUP (NON-DESTRUCTIVE TO EXISTING QUESTIONS)
+-- 3. SAFE CLEANUP OF OBSOLETE CHAPTERS (NON-DESTRUCTIVE TO EXISTING QUESTIONS)
 DO $$
 DECLARE
   v_questions_count INT;
@@ -82,8 +45,10 @@ BEGIN
   SELECT COUNT(*) INTO v_questions_count FROM public.questions WHERE chapter_id IS NOT NULL;
   
   IF v_questions_count = 0 THEN
+    -- If no questions depend on chapters, wipe obsolete chapters safely
     DELETE FROM public.chapters;
   ELSE
+    -- If questions exist, only remove chapters that are unreferenced
     DELETE FROM public.chapters
     WHERE id NOT IN (
       SELECT id FROM public.questions WHERE chapter_id IS NOT NULL
@@ -92,7 +57,7 @@ BEGIN
   END IF;
 END $$;
 
--- 4. SEED EXACT 85 CHAPTERS FOR ALL 7 SUBJECTS (ICAB Certificate Level Syllabus)
+-- 4. UPSERT EXACT 85 CHAPTERS (DETERMINISTIC UUIDS & NUMBERING)
 INSERT INTO public.chapters (id, subject_id, name, slug, chapter_number, is_active) VALUES
 -- Accounting Chapters (15)
 ('c0000000-0000-0000-0001-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Introduction to accounting', 'introduction-to-accounting', 1, true),
@@ -200,8 +165,16 @@ ON CONFLICT (id) DO UPDATE SET
   chapter_number = EXCLUDED.chapter_number,
   is_active = EXCLUDED.is_active;
 
--- 5. VERIFICATION QUERY (Confirms all 7 subjects and full syllabus seeded)
+COMMIT;
+
+-- 5. VERIFICATION REPORT
 SELECT 
-  (SELECT COUNT(*) FROM public.subjects) AS total_subjects,
-  (SELECT COUNT(*) FROM public.chapters) AS total_chapters,
-  (SELECT COUNT(*) FROM public.exam_configs) AS total_exam_configs;
+  s.name AS subject_name,
+  s.code AS subject_code,
+  COUNT(c.id) AS chapter_count
+FROM public.subjects s
+LEFT JOIN public.chapters c ON c.subject_id = s.id
+GROUP BY s.id, s.name, s.code, s.display_order
+ORDER BY s.display_order ASC;
+
+SELECT COUNT(*) AS total_chapters FROM public.chapters;

@@ -55,6 +55,15 @@ export default async function ExamPage({ params }: ExamPageProps) {
     .eq('attempt_id', attemptId)
     .order('question_order', { ascending: true });
 
+  // Security: Sanitize question snapshots to prevent leaking explanations or answers to active test-takers
+  const sanitizedQuestions = questions?.map((q: any) => {
+    if (q.question_snapshot && typeof q.question_snapshot === 'object') {
+      const { explanation, ...cleanSnapshot } = q.question_snapshot;
+      return { ...q, question_snapshot: cleanSnapshot };
+    }
+    return q;
+  }) || [];
+
   // Fetch Existing Answers
   const { data: answers } = await adminClient
     .from('attempt_answers')
@@ -64,7 +73,7 @@ export default async function ExamPage({ params }: ExamPageProps) {
   return (
     <ExamWorkspace
       attempt={attempt}
-      initialQuestions={questions || []}
+      initialQuestions={sanitizedQuestions}
       initialAnswers={answers || []}
     />
   );

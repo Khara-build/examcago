@@ -34,44 +34,39 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Helper to ensure refreshed auth session cookies are preserved during redirects
+  const createRedirectWithCookies = (url: URL | string) => {
+    const redirectResponse = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+    });
+    return redirectResponse;
+  };
+
   const pathname = request.nextUrl.pathname;
 
-  // Redirect already authenticated users from login/register to dashboard
+  // 1. Redirect already authenticated users from login/register to dashboard
   if ((pathname === '/login' || pathname === '/register') && user) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
-    return NextResponse.redirect(url);
+    return createRedirectWithCookies(url);
   }
 
-  // Protect student dashboard & exam routes
+  // 2. Protect student dashboard & exam routes
   if ((pathname.startsWith('/dashboard') || pathname.startsWith('/exam')) && !user) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirect', pathname);
-    return NextResponse.redirect(url);
+    return createRedirectWithCookies(url);
   }
 
-  // Protect admin routes
-  if (pathname.startsWith('/admin')) {
-    if (!user) {
-      const url = request.nextUrl.clone();
-      url.pathname = '/login';
-      url.searchParams.set('redirect', pathname);
-      return NextResponse.redirect(url);
-    }
-
-    // Check user profile role in Supabase
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (profile?.role !== 'admin') {
-      const url = request.nextUrl.clone();
-      url.pathname = '/dashboard';
-      return NextResponse.redirect(url);
-    }
+  // 3. Protect admin routes (authentication check)
+  // Role authorization is verified authoritatively in src/app/admin/layout.tsx
+  if (pathname.startsWith('/admin') && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    url.searchParams.set('redirect', pathname);
+    return createRedirectWithCookies(url);
   }
 
   return supabaseResponse;

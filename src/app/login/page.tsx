@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Navbar } from '@/components/layout/Navbar';
@@ -17,6 +17,13 @@ function LoginFormContent() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Catch any recovery hash fragments redirected by Supabase email templates
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token'))) {
+      window.location.href = `/auth/reset-password${window.location.hash}`;
+    }
+  }, []);
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
@@ -29,6 +36,8 @@ function LoginFormContent() {
     if (result?.error) {
       setError(result.error);
       setIsLoading(false);
+    } else if (result?.success) {
+      window.location.href = result.redirectTo || redirectTo;
     }
   }
 
@@ -85,6 +94,9 @@ function LoginFormContent() {
             <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
               Password
             </label>
+            <Link href="/auth/forgot-password" className="text-xs text-brand-red hover:underline font-medium">
+              Forgot password?
+            </Link>
           </div>
           <input
             type="password"

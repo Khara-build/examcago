@@ -237,7 +237,7 @@ INSERT INTO public.subjects (id, name, slug, code, description, display_order, i
 ('a0000000-0000-0000-0000-000000000001', 'Accounting', 'accounting', 'ACC', 'Financial accounting fundamentals, double-entry bookkeeping, trial balance, and financial statement preparation.', 1, true),
 ('a0000000-0000-0000-0000-000000000002', 'Management Information', 'management-information', 'MI', 'Cost accounting, budgeting, variance analysis, forecasting, and managerial decision support.', 2, true),
 ('a0000000-0000-0000-0000-000000000003', 'Business Technology and Finance', 'business-technology-and-finance', 'BTF', 'Business organizational structure, economic environment, financial markets, and business management.', 3, true),
-('a0000000-0000-0000-0000-000000000004', 'Tax', 'tax', 'TAX', 'Income tax principles, corporate tax, withholding tax, VAT rules, and tax computation frameworks.', 4, true),
+('a0000000-0000-0000-0000-000000000004', 'Taxation', 'taxation', 'TAX', 'Income tax principles, corporate tax, withholding tax, VAT rules, and tax computation frameworks.', 4, true),
 ('a0000000-0000-0000-0000-000000000005', 'Assurance', 'assurance', 'ASR', 'Audit concepts, internal controls, audit evidence, professional ethics, and assurance engagement procedures.', 5, true),
 ('a0000000-0000-0000-0000-000000000006', 'Business Law', 'business-law', 'BLAW', 'Contract law, Companies Act framework, partnership laws, negotiable instruments, and commercial legal guidelines.', 6, true),
 ('a0000000-0000-0000-0000-000000000007', 'Information Technology', 'information-technology', 'IT', 'Information systems, computer hardware/software, cybersecurity, database management, and IT controls in business.', 7, true)
@@ -267,7 +267,7 @@ INSERT INTO public.exam_configs (
 ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Accounting Full Book Exam', 'full_book', 90, 40, 2, 0, 0, 1, 20, 100, true),
 ('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'Management Information Full Book Exam', 'full_book', 90, 35, 2, 2, 15, 0, 0, 100, true),
 ('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', 'Business Technology and Finance Full Book Exam', 'full_book', 90, 50, 2, 0, 0, 0, 0, 100, true),
-('b0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004', 'Tax Full Book Exam', 'full_book', 90, 35, 2, 2, 15, 0, 0, 100, true),
+('b0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004', 'Taxation Full Book Exam', 'full_book', 90, 35, 2, 2, 15, 0, 0, 100, true),
 ('b0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000005', 'Assurance Full Book Exam', 'full_book', 90, 50, 2, 0, 0, 0, 0, 100, true),
 ('b0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000006', 'Business Law Full Book Exam', 'full_book', 60, 25, 2, 0, 0, 0, 0, 50, true),
 ('b0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000007', 'Information Technology Full Book Exam', 'full_book', 60, 25, 2, 0, 0, 0, 0, 50, true)
@@ -351,30 +351,50 @@ CREATE POLICY "Users can view and edit attempt answers of their attempts" ON pub
 -- HELPER FUNCTION: CHECK ADMIN ROLE WITHOUT RLS RECURSION
 CREATE OR REPLACE FUNCTION public.is_admin(p_user_id UUID DEFAULT auth.uid())
 RETURNS BOOLEAN
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, pg_temp
 STABLE
 AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE id = p_user_id AND role = 'admin'
+BEGIN
+  -- If not logged in, cannot be admin
+  IF p_user_id IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  -- Bypasses RLS because function is SECURITY DEFINER owned by postgres
+  RETURN EXISTS (
+    SELECT 1
+    FROM public.profiles
+    WHERE id = p_user_id
+      AND role = 'admin'
   );
+END;
 $$;
+
+ALTER FUNCTION public.is_admin(UUID) OWNER TO postgres;
+REVOKE EXECUTE ON FUNCTION public.is_admin(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin(UUID) TO anon, authenticated, service_role;
 
 -- ADMIN FULL PRIVILEGE POLICIES
 DROP POLICY IF EXISTS "Admins have full access to profiles" ON public.profiles;
 CREATE POLICY "Admins have full access to profiles" ON public.profiles FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
   public.is_admin(auth.uid())
 );
 
 DROP POLICY IF EXISTS "Admins have full access to questions" ON public.questions;
 CREATE POLICY "Admins have full access to questions" ON public.questions FOR ALL USING (
   public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
 );
 
 DROP POLICY IF EXISTS "Admins have full access to question options" ON public.question_options;
 CREATE POLICY "Admins have full access to question options" ON public.question_options FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
   public.is_admin(auth.uid())
 );
 
@@ -382,31 +402,85 @@ DROP POLICY IF EXISTS "Admins have full access to scenario questions" ON public.
 DROP POLICY IF EXISTS "Admins full access on scenario_questions" ON public.scenario_questions;
 CREATE POLICY "Admins have full access to scenario questions" ON public.scenario_questions FOR ALL USING (
   public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
 );
 
 DROP POLICY IF EXISTS "Admins have full access to large questions" ON public.large_questions;
 DROP POLICY IF EXISTS "Admins full access on large_questions" ON public.large_questions;
 CREATE POLICY "Admins have full access to large questions" ON public.large_questions FOR ALL USING (
   public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
 );
 
 DROP POLICY IF EXISTS "Admins have full access to subjects" ON public.subjects;
 CREATE POLICY "Admins have full access to subjects" ON public.subjects FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
   public.is_admin(auth.uid())
 );
 
 DROP POLICY IF EXISTS "Admins have full access to chapters" ON public.chapters;
 CREATE POLICY "Admins have full access to chapters" ON public.chapters FOR ALL USING (
   public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
 );
 
 DROP POLICY IF EXISTS "Admins have full access to exam configs" ON public.exam_configs;
 CREATE POLICY "Admins have full access to exam configs" ON public.exam_configs FOR ALL USING (
   public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
 );
 
 DROP POLICY IF EXISTS "Admins have full access to bulk imports" ON public.bulk_imports;
 CREATE POLICY "Admins have full access to bulk imports" ON public.bulk_imports FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to token accounts" ON public.token_accounts;
+CREATE POLICY "Admins have full access to token accounts" ON public.token_accounts FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to token transactions" ON public.token_transactions;
+CREATE POLICY "Admins have full access to token transactions" ON public.token_transactions FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to referrals" ON public.referrals;
+CREATE POLICY "Admins have full access to referrals" ON public.referrals FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to exam attempts" ON public.exam_attempts;
+CREATE POLICY "Admins have full access to exam attempts" ON public.exam_attempts FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to attempt questions" ON public.attempt_questions;
+CREATE POLICY "Admins have full access to attempt questions" ON public.attempt_questions FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to attempt answers" ON public.attempt_answers;
+CREATE POLICY "Admins have full access to attempt answers" ON public.attempt_answers FOR ALL USING (
+  public.is_admin(auth.uid())
+) WITH CHECK (
   public.is_admin(auth.uid())
 );
 

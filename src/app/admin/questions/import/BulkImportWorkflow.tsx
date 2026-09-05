@@ -111,19 +111,73 @@ export function BulkImportWorkflow({ subjects, chapters }: BulkImportWorkflowPro
     }
   }
 
-  // Generate and download sample CSV template with instructions
+  // Generate and download sample CSV template with instructions based on current ICAB Certificate Level syllabus
   function downloadSampleCSV() {
     const csvContent = `Subject,Chapter,Question,Option A,Option B,Option C,Option D,Correct Answer,Explanation,Marks
-Accounting,Introduction to Accounting & Double Entry,"Which accounting concept requires transactions to be recorded at historical cost?",Historical Cost Principle,Going Concern,Matching Principle,Materiality,A,"The historical cost principle dictates that assets are recorded at their purchase price.",2
-Accounting,Trial Balance & Rectification of Errors,"Which of the following errors will cause an imbalance in the trial balance?",Single entry error,Omission of transaction,Error of principle,Error of commission,A,"Single entry errors create an unequal balance between debits and credits.",2
-Management Information,Cost Classification and Behavior,"What type of cost remains constant per unit regardless of output changes?",Variable Cost,Fixed Cost,Semi-variable Cost,Step Cost,A,"Variable cost per unit is constant; total variable cost varies with volume.",2
-Tax,Basic Principles of Income Tax,"What is the standard tax year cycle classification in tax compliance?",Assessment Year,Income Year,Calendar Year,Financial Quarter,A,"Assessment year follows the income year for tax computation.",2`;
+Accounting,Introduction to accounting,"Which accounting concept requires transactions to be recorded at historical cost?",Historical Cost Principle,Going Concern,Matching Principle,Materiality,A,"The historical cost principle dictates that assets are recorded at their purchase price.",2
+Accounting,Errors and corrections to accounting records and financial statements,"Which of the following errors will cause an imbalance in the trial balance?",Single entry error,Omission of transaction,Error of principle,Error of commission,A,"Single entry errors create an unequal balance between debits and credits.",2
+Management Information,The fundamentals of costing,"What type of cost remains constant per unit regardless of output changes?",Variable Cost,Fixed Cost,Semi-variable Cost,Step Cost,A,"Variable cost per unit is constant; total variable cost varies with volume.",2
+Taxation,Basic concepts of taxation and Introduction to Bangladesh income tax,"What is the standard tax year cycle classification in tax compliance?",Assessment Year,Income Year,Calendar Year,Financial Quarter,A,"Assessment year follows the income year for tax computation.",2
+Assurance,Concept of and need for assurance,"What is the primary objective of an external financial statement audit?",Express an independent opinion,Detect all minor fraud,Prepare final accounts,Advise on business strategy,A,"An external audit provides reasonable assurance via an independent audit opinion.",2
+Business Law,Introduction to Bangladesh legal system,"What is the supreme law of Bangladesh?",The Constitution of Bangladesh,The Penal Code,The Companies Act,The Contract Act,A,"The Constitution is the supreme law of the Republic.",2
+Information Technology,IT PRO MAX,"Which of the following is a primary control for database access security?",Role-based access control (RBAC),Screen saver password,Desktop background,Monitor resolution,A,"RBAC ensures only authorized users have access to sensitive database tables.",2`;
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', 'exam_cago_mcq_import_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // Generate and download sample JSON template
+  function downloadSampleJSON() {
+    const sampleData = [
+      {
+        Subject: "Accounting",
+        Chapter: "Introduction to accounting",
+        Question: "Which accounting concept requires transactions to be recorded at historical cost?",
+        "Option A": "Historical Cost Principle",
+        "Option B": "Going Concern",
+        "Option C": "Matching Principle",
+        "Option D": "Materiality",
+        "Correct Answer": "A",
+        Explanation: "The historical cost principle dictates that assets are recorded at their purchase price.",
+        Marks: 2
+      },
+      {
+        Subject: "Taxation",
+        Chapter: "Basic concepts of taxation and Introduction to Bangladesh income tax",
+        Question: "What is the standard tax year cycle classification in tax compliance?",
+        "Option A": "Assessment Year",
+        "Option B": "Income Year",
+        "Option C": "Calendar Year",
+        "Option D": "Financial Quarter",
+        "Correct Answer": "A",
+        Explanation: "Assessment year follows the income year for tax computation.",
+        Marks: 2
+      },
+      {
+        Subject: "Information Technology",
+        Chapter: "IT PRO MAX",
+        Question: "Which of the following is a primary control for database access security?",
+        "Option A": "Role-based access control (RBAC)",
+        "Option B": "Screen saver password",
+        "Option C": "Desktop background",
+        "Option D": "Monitor resolution",
+        "Correct Answer": "A",
+        Explanation: "RBAC ensures only authorized users have access to sensitive database tables.",
+        Marks: 2
+      }
+    ];
+
+    const blob = new Blob([JSON.stringify(sampleData, null, 2)], { type: 'application/json;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'exam_cago_mcq_import_template.json');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -149,14 +203,20 @@ Tax,Basic Principles of Income Tax,"What is the standard tax year cycle classifi
               Download Bulk Import Templates & Formatting Rules
             </h3>
             <p className="text-xs text-gray-600">
-              Download formatted CSV/Excel templates containing exact column headers: <strong>Subject, Chapter, Question, Option A, Option B, Option C, Option D, Correct Answer, Explanation, Marks</strong>.
+              Download templates containing exact column headers: <strong>Subject, Chapter, Question, Option A, Option B, Option C, Option D, Correct Answer, Explanation, Marks</strong>.
             </p>
           </div>
 
-          <Button variant="outline" size="sm" onClick={downloadSampleCSV} className="gap-2 shrink-0 bg-white">
-            <Download className="h-4 w-4 text-brand-red" />
-            Download Sample CSV Template
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={downloadSampleCSV} className="gap-2 bg-white">
+              <Download className="h-4 w-4 text-brand-red" />
+              Sample CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadSampleJSON} className="gap-2 bg-white">
+              <Download className="h-4 w-4 text-brand-red" />
+              Sample JSON
+            </Button>
+          </div>
         </div>
 
         <div className="text-[11px] text-gray-700 bg-white p-3 rounded border border-gray-200 grid grid-cols-1 md:grid-cols-3 gap-3">
