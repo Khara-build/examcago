@@ -7,8 +7,9 @@ import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Ca
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { startExamAttemptAction } from '@/app/actions/exam';
-import { BookOpen, Clock, Award, Play, CheckCircle2, Coins, ArrowLeft } from 'lucide-react';
+import { BookOpen, Clock, Award, Play, CheckCircle2, Coins, ArrowLeft, AlertTriangle, Upload } from 'lucide-react';
 import { ExamLauncherButton } from './ExamLauncherButton';
 
 export const dynamic = 'force-dynamic';
@@ -36,12 +37,25 @@ export default async function SubjectDetailPage({ params }: SubjectPageProps) {
     if (tokenAcc) tokenBalance = tokenAcc.balance;
   }
 
-  // Fetch subject detail from DB by slug
-  const { data: subject } = await supabase
+  // Fetch subject detail with resilient admin fallback
+  let subject: any = null;
+  const { data: userSub, error: userSubErr } = await supabase
     .from('subjects')
     .select('*, exam_configs(*), chapters(*)')
     .eq('slug', slug)
     .single();
+
+  if (userSub) {
+    subject = userSub;
+  } else {
+    const adminClient = createAdminClient();
+    const { data: adminSub } = await adminClient
+      .from('subjects')
+      .select('*, exam_configs(*), chapters(*)')
+      .eq('slug', slug)
+      .single();
+    subject = adminSub;
+  }
 
   if (!subject) {
     notFound();
@@ -49,6 +63,19 @@ export default async function SubjectDetailPage({ params }: SubjectPageProps) {
 
   const fullBookConfig = subject.exam_configs?.find((c: any) => c.exam_type === 'full_book') || subject.exam_configs?.[0];
   const chapters = subject.chapters || [];
+
+  // Query actual question bank availability for this subject
+  const adminClient = createAdminClient();
+  const { count: activeMcqCount } = await adminClient
+    .from('questions')
+    .select('id', { count: 'exact', head: true })
+    .eq('subject_id', subject.id)
+    .eq('is_active', true)
+    .eq('question_type', 'mcq');
+
+  const availableCount = activeMcqCount || 0;
+  const requiredCount = fullBookConfig?.mcq_count || 40;
+  const isQuestionBankReady = availableCount >= requiredCount;
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-offwhite">
@@ -138,6 +165,9 @@ export default async function SubjectDetailPage({ params }: SubjectPageProps) {
                   examConfigId={fullBookConfig.id}
                   isLoggedIn={!!user}
                   tokenBalance={tokenBalance}
+                  availableQuestions={availableCount}
+                  requiredQuestions={requiredCount}
+                  isAdmin={userRole === 'admin'}
                 />
               )}
             </div>

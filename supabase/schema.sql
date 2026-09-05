@@ -1,5 +1,8 @@
+-- =========================================================================
 -- EXAM CAGO Complete PostgreSQL Database Schema & Migration Script
 -- Designed for Supabase with Row Level Security (RLS)
+-- ICAB Certificate Level Examination Platform
+-- =========================================================================
 
 -- 1. EXTENSIONS & FUNCTIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -212,64 +215,84 @@ CREATE TABLE IF NOT EXISTS public.bulk_imports (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- INDEXES FOR PERFORMANCE
+-- =========================================================================
+-- INDEXES FOR MAXIMUM QUERY PERFORMANCE
+-- =========================================================================
 CREATE INDEX IF NOT EXISTS idx_questions_subject_chapter ON public.questions(subject_id, chapter_id);
 CREATE INDEX IF NOT EXISTS idx_questions_search ON public.questions(subject_id, chapter_id, is_active, question_type);
 CREATE INDEX IF NOT EXISTS idx_questions_created ON public.questions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_question_options_question ON public.question_options(question_id);
+CREATE INDEX IF NOT EXISTS idx_chapters_subject_num ON public.chapters(subject_id, chapter_number);
+CREATE INDEX IF NOT EXISTS idx_exam_configs_subject ON public.exam_configs(subject_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_exam_attempts_user ON public.exam_attempts(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_attempt_questions_attempt ON public.attempt_questions(attempt_id, question_order);
 CREATE INDEX IF NOT EXISTS idx_attempt_answers_attempt ON public.attempt_answers(attempt_id);
 CREATE INDEX IF NOT EXISTS idx_token_transactions_user ON public.token_transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_profiles_referral_code ON public.profiles(referral_code);
 
--- SEED THE 7 ICAB CERTIFICATE LEVEL SUBJECTS
-INSERT INTO public.subjects (id, name, slug, code, description, display_order) VALUES
-('a0000000-0000-0000-0000-000000000001', 'Accounting', 'accounting', 'ACC', 'Financial accounting fundamentals, double-entry bookkeeping, trial balance, and financial statement preparation.', 1),
-('a0000000-0000-0000-0000-000000000002', 'Management Information', 'management-information', 'MI', 'Cost accounting, budgeting, variance analysis, forecasting, and managerial decision support.', 2),
-('a0000000-0000-0000-0000-000000000003', 'Business Technology and Finance', 'business-technology-and-finance', 'BTF', 'Business organizational structure, economic environment, financial markets, and business management.', 3),
-('a0000000-0000-0000-0000-000000000004', 'Tax', 'tax', 'TAX', 'Income tax principles, corporate tax, withholding tax, VAT rules, and tax computation frameworks.', 4),
-('a0000000-0000-0000-0000-000000000005', 'Assurance', 'assurance', 'ASR', 'Audit concepts, internal controls, audit evidence, professional ethics, and assurance engagement procedures.', 5),
-('a0000000-0000-0000-0000-000000000006', 'Business Law', 'business-law', 'BLAW', 'Contract law, Companies Act framework, partnership laws, negotiable instruments, and commercial legal guidelines.', 6),
-('a0000000-0000-0000-0000-000000000007', 'Information Technology', 'information-technology', 'IT', 'Information systems, computer hardware/software, cybersecurity, database management, and IT controls in business.', 7)
-ON CONFLICT (name) DO NOTHING;
+-- =========================================================================
+-- SEED DATA: 7 ICAB CERTIFICATE LEVEL SUBJECTS & EXAM CONFIGURATIONS
+-- =========================================================================
+INSERT INTO public.subjects (id, name, slug, code, description, display_order, is_active) VALUES
+('a0000000-0000-0000-0000-000000000001', 'Accounting', 'accounting', 'ACC', 'Financial accounting fundamentals, double-entry bookkeeping, trial balance, and financial statement preparation.', 1, true),
+('a0000000-0000-0000-0000-000000000002', 'Management Information', 'management-information', 'MI', 'Cost accounting, budgeting, variance analysis, forecasting, and managerial decision support.', 2, true),
+('a0000000-0000-0000-0000-000000000003', 'Business Technology and Finance', 'business-technology-and-finance', 'BTF', 'Business organizational structure, economic environment, financial markets, and business management.', 3, true),
+('a0000000-0000-0000-0000-000000000004', 'Tax', 'tax', 'TAX', 'Income tax principles, corporate tax, withholding tax, VAT rules, and tax computation frameworks.', 4, true),
+('a0000000-0000-0000-0000-000000000005', 'Assurance', 'assurance', 'ASR', 'Audit concepts, internal controls, audit evidence, professional ethics, and assurance engagement procedures.', 5, true),
+('a0000000-0000-0000-0000-000000000006', 'Business Law', 'business-law', 'BLAW', 'Contract law, Companies Act framework, partnership laws, negotiable instruments, and commercial legal guidelines.', 6, true),
+('a0000000-0000-0000-0000-000000000007', 'Information Technology', 'information-technology', 'IT', 'Information systems, computer hardware/software, cybersecurity, database management, and IT controls in business.', 7, true)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  slug = EXCLUDED.slug,
+  code = EXCLUDED.code,
+  description = EXCLUDED.description,
+  display_order = EXCLUDED.display_order,
+  is_active = EXCLUDED.is_active;
 
--- SEED DEFAULT EXAM CONFIGURATIONS
-INSERT INTO public.exam_configs (subject_id, name, exam_type, duration_minutes, mcq_count, mcq_marks_each, scenario_count, scenario_marks_each, large_count, large_marks_each, total_marks) VALUES
-('a0000000-0000-0000-0000-000000000001', 'Accounting Full Book Exam', 'full_book', 90, 40, 2, 0, 0, 1, 20, 100),
-('a0000000-0000-0000-0000-000000000002', 'Management Information Full Book Exam', 'full_book', 90, 35, 2, 2, 15, 0, 0, 100),
-('a0000000-0000-0000-0000-000000000003', 'Business Technology and Finance Full Book Exam', 'full_book', 90, 50, 2, 0, 0, 0, 0, 100),
-('a0000000-0000-0000-0000-000000000004', 'Tax Full Book Exam', 'full_book', 90, 35, 2, 2, 15, 0, 0, 100),
-('a0000000-0000-0000-0000-000000000005', 'Assurance Full Book Exam', 'full_book', 90, 50, 2, 0, 0, 0, 0, 100),
-('a0000000-0000-0000-0000-000000000006', 'Business Law Full Book Exam', 'full_book', 60, 25, 2, 0, 0, 0, 0, 50),
-('a0000000-0000-0000-0000-000000000007', 'Information Technology Full Book Exam', 'full_book', 60, 25, 2, 0, 0, 0, 0, 50)
-ON CONFLICT DO NOTHING;
+INSERT INTO public.exam_configs (
+  id,
+  subject_id,
+  name,
+  exam_type,
+  duration_minutes,
+  mcq_count,
+  mcq_marks_each,
+  scenario_count,
+  scenario_marks_each,
+  large_count,
+  large_marks_each,
+  total_marks,
+  is_active
+) VALUES
+('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Accounting Full Book Exam', 'full_book', 90, 40, 2, 0, 0, 1, 20, 100, true),
+('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'Management Information Full Book Exam', 'full_book', 90, 35, 2, 2, 15, 0, 0, 100, true),
+('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', 'Business Technology and Finance Full Book Exam', 'full_book', 90, 50, 2, 0, 0, 0, 0, 100, true),
+('b0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004', 'Tax Full Book Exam', 'full_book', 90, 35, 2, 2, 15, 0, 0, 100, true),
+('b0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000005', 'Assurance Full Book Exam', 'full_book', 90, 50, 2, 0, 0, 0, 0, 100, true),
+('b0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000006', 'Business Law Full Book Exam', 'full_book', 60, 25, 2, 0, 0, 0, 0, 50, true),
+('b0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000007', 'Information Technology Full Book Exam', 'full_book', 60, 25, 2, 0, 0, 0, 0, 50, true)
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name,
+  duration_minutes = EXCLUDED.duration_minutes,
+  mcq_count = EXCLUDED.mcq_count,
+  mcq_marks_each = EXCLUDED.mcq_marks_each,
+  scenario_count = EXCLUDED.scenario_count,
+  scenario_marks_each = EXCLUDED.scenario_marks_each,
+  large_count = EXCLUDED.large_count,
+  large_marks_each = EXCLUDED.large_marks_each,
+  total_marks = EXCLUDED.total_marks,
+  is_active = EXCLUDED.is_active;
 
--- SEED CHAPTERS FOR EACH SUBJECT
-INSERT INTO public.chapters (subject_id, name, slug, chapter_number, description) VALUES
-('a0000000-0000-0000-0000-000000000001', 'Introduction to Accounting & Double Entry', 'intro-accounting-double-entry', 1, 'Basic accounting principles, debit/credit rules, and ledger recording.'),
-('a0000000-0000-0000-0000-000000000001', 'Trial Balance & Rectification of Errors', 'trial-balance-rectification', 2, 'Extracting trial balances and adjusting journal entries for errors.'),
-('a0000000-0000-0000-0000-000000000001', 'Financial Statements Preparation', 'financial-statements-prep', 3, 'Income statement, statement of financial position, and year-end adjustments.'),
-
-('a0000000-0000-0000-0000-000000000002', 'Cost Classification and Behavior', 'cost-classification-behavior', 1, 'Direct vs indirect costs, fixed vs variable costs, and cost centers.'),
-('a0000000-0000-0000-0000-000000000002', 'Budgeting and Control', 'budgeting-control', 2, 'Operational budgets, cash budgets, and flexible budgeting techniques.'),
-
-('a0000000-0000-0000-0000-000000000003', 'Business Environment & Structure', 'business-environment-structure', 1, 'Types of business organizations and macroeconomic environment factors.'),
-
-('a0000000-0000-0000-0000-000000000004', 'Basic Principles of Income Tax', 'basic-principles-income-tax', 1, 'Tax rates, assessment years, and total income calculations.'),
-
-('a0000000-0000-0000-0000-000000000005', 'Audit Framework and Ethics', 'audit-framework-ethics', 1, 'IFAC code of ethics, audit objectives, and engagement letters.'),
-
-('a0000000-0000-0000-0000-000000000006', 'Law of Contract', 'law-of-contract', 1, 'Offer, acceptance, consideration, legal capacity, and remedies for breach.'),
-
-('a0000000-0000-0000-0000-000000000007', 'Information Systems & Data Management', 'information-systems-data', 1, 'Hardware, software, relational databases, and enterprise resource planning.')
-ON CONFLICT DO NOTHING;
-
--- ENABLE ROW LEVEL SECURITY
+-- =========================================================================
+-- ROW LEVEL SECURITY (RLS) POLICIES
+-- =========================================================================
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chapters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.question_options ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.scenario_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.large_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exam_configs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.token_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.token_transactions ENABLE ROW LEVEL SECURITY;
@@ -279,55 +302,117 @@ ALTER TABLE public.attempt_questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attempt_answers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bulk_imports ENABLE ROW LEVEL SECURITY;
 
--- RLS POLICIES: PUBLIC ACCESS FOR READ-ONLY DATA
+-- PUBLIC ACCESS FOR READ-ONLY CATALOG DATA
+DROP POLICY IF EXISTS "Public subjects read access" ON public.subjects;
 CREATE POLICY "Public subjects read access" ON public.subjects FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public chapters read access" ON public.chapters;
 CREATE POLICY "Public chapters read access" ON public.chapters FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Public exam configs read access" ON public.exam_configs;
 CREATE POLICY "Public exam configs read access" ON public.exam_configs FOR SELECT USING (true);
 
--- RLS POLICIES: PROFILES & TOKENS
+-- STUDENT ACCESS POLICIES: PROFILES & TOKENS
+DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can view own token account" ON public.token_accounts;
 CREATE POLICY "Users can view own token account" ON public.token_accounts FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can view own token transactions" ON public.token_transactions;
 CREATE POLICY "Users can view own token transactions" ON public.token_transactions FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can view own referrals" ON public.referrals;
 CREATE POLICY "Users can view own referrals" ON public.referrals FOR SELECT USING (auth.uid() = referrer_id OR auth.uid() = referred_id);
 
--- RLS POLICIES: EXAM ATTEMPTS
+-- STUDENT ACCESS POLICIES: EXAM ATTEMPTS
+DROP POLICY IF EXISTS "Users can view own exam attempts" ON public.exam_attempts;
 CREATE POLICY "Users can view own exam attempts" ON public.exam_attempts FOR SELECT USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert own exam attempts" ON public.exam_attempts;
 CREATE POLICY "Users can insert own exam attempts" ON public.exam_attempts FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update own exam attempts" ON public.exam_attempts;
 CREATE POLICY "Users can update own exam attempts" ON public.exam_attempts FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can view attempt questions of their attempts" ON public.attempt_questions;
 CREATE POLICY "Users can view attempt questions of their attempts" ON public.attempt_questions FOR SELECT USING (
   EXISTS (SELECT 1 FROM public.exam_attempts WHERE id = attempt_questions.attempt_id AND user_id = auth.uid())
 );
 
+DROP POLICY IF EXISTS "Users can view and edit attempt answers of their attempts" ON public.attempt_answers;
 CREATE POLICY "Users can view and edit attempt answers of their attempts" ON public.attempt_answers FOR ALL USING (
   EXISTS (SELECT 1 FROM public.exam_attempts WHERE id = attempt_answers.attempt_id AND user_id = auth.uid())
 );
 
--- RLS POLICIES: ADMIN FULL ACCESS
+-- HELPER FUNCTION: CHECK ADMIN ROLE WITHOUT RLS RECURSION
+CREATE OR REPLACE FUNCTION public.is_admin(p_user_id UUID DEFAULT auth.uid())
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = p_user_id AND role = 'admin'
+  );
+$$;
+
+-- ADMIN FULL PRIVILEGE POLICIES
+DROP POLICY IF EXISTS "Admins have full access to profiles" ON public.profiles;
 CREATE POLICY "Admins have full access to profiles" ON public.profiles FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins have full access to questions" ON public.questions FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins have full access to question options" ON public.question_options FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins have full access to subjects" ON public.subjects FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins have full access to chapters" ON public.chapters FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins have full access to exam configs" ON public.exam_configs FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Admins have full access to bulk imports" ON public.bulk_imports FOR ALL USING (
-  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+  public.is_admin(auth.uid())
 );
 
--- AUTOMATIC USER REGISTRATION TRIGGER FUNCTION
+DROP POLICY IF EXISTS "Admins have full access to questions" ON public.questions;
+CREATE POLICY "Admins have full access to questions" ON public.questions FOR ALL USING (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to question options" ON public.question_options;
+CREATE POLICY "Admins have full access to question options" ON public.question_options FOR ALL USING (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to scenario questions" ON public.scenario_questions;
+DROP POLICY IF EXISTS "Admins full access on scenario_questions" ON public.scenario_questions;
+CREATE POLICY "Admins have full access to scenario questions" ON public.scenario_questions FOR ALL USING (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to large questions" ON public.large_questions;
+DROP POLICY IF EXISTS "Admins full access on large_questions" ON public.large_questions;
+CREATE POLICY "Admins have full access to large questions" ON public.large_questions FOR ALL USING (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to subjects" ON public.subjects;
+CREATE POLICY "Admins have full access to subjects" ON public.subjects FOR ALL USING (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to chapters" ON public.chapters;
+CREATE POLICY "Admins have full access to chapters" ON public.chapters FOR ALL USING (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to exam configs" ON public.exam_configs;
+CREATE POLICY "Admins have full access to exam configs" ON public.exam_configs FOR ALL USING (
+  public.is_admin(auth.uid())
+);
+
+DROP POLICY IF EXISTS "Admins have full access to bulk imports" ON public.bulk_imports;
+CREATE POLICY "Admins have full access to bulk imports" ON public.bulk_imports FOR ALL USING (
+  public.is_admin(auth.uid())
+);
+
+-- =========================================================================
+-- DATABASE TRIGGERS: AUTOMATIC USER REGISTRATION
+-- =========================================================================
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -385,13 +470,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- TRIGGER ON AUTH USERS INSERT
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
+-- =========================================================================
 -- ATOMIC EXAM LAUNCHER RPC FUNCTION
+-- =========================================================================
 CREATE OR REPLACE FUNCTION public.start_exam_attempt_rpc(
   p_user_id UUID,
   p_subject_id UUID,
@@ -638,3 +724,82 @@ BEGIN
 END;
 $$;
 
+-- =========================================================================
+-- ATOMIC BULK IMPORT PL/PGSQL FUNCTION (PHASE 2)
+-- =========================================================================
+CREATE OR REPLACE FUNCTION public.import_mcq_batch(
+  p_admin_id UUID,
+  p_file_name TEXT,
+  p_file_type TEXT,
+  p_total_rows INT,
+  p_valid_rows INT,
+  p_invalid_rows INT,
+  p_duplicate_rows INT,
+  p_rows JSONB
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_import_id UUID;
+  v_imported_count INT := 0;
+  v_row JSONB;
+  v_q_id UUID;
+  v_correct_letter TEXT;
+BEGIN
+  -- Insert audit log header
+  INSERT INTO public.bulk_imports (
+    admin_id, file_name, file_type, total_rows, valid_rows, invalid_rows, duplicate_rows, imported_rows, status
+  ) VALUES (
+    p_admin_id, p_file_name, p_file_type, p_total_rows, p_valid_rows, p_invalid_rows, p_duplicate_rows, 0, 'processing'
+  ) RETURNING id INTO v_import_id;
+
+  -- Atomic Loop through all rows
+  FOR v_row IN SELECT * FROM jsonb_array_elements(p_rows)
+  LOOP
+    -- Insert question
+    INSERT INTO public.questions (
+      subject_id,
+      chapter_id,
+      question_text,
+      question_type,
+      marks,
+      explanation,
+      is_active
+    ) VALUES (
+      (v_row->>'subject_id')::UUID,
+      CASE WHEN (v_row->>'chapter_id') IS NOT NULL AND (v_row->>'chapter_id') <> '' THEN (v_row->>'chapter_id')::UUID ELSE NULL END,
+      v_row->>'question_text',
+      'mcq',
+      COALESCE((v_row->>'marks')::INT, 2),
+      v_row->>'explanation',
+      TRUE
+    ) RETURNING id INTO v_q_id;
+
+    v_correct_letter := UPPER(v_row->>'correct_answer');
+
+    -- Insert options A, B, C, D
+    INSERT INTO public.question_options (question_id, option_letter, option_text, is_correct)
+    VALUES
+      (v_q_id, 'A', v_row->>'option_a', v_correct_letter = 'A'),
+      (v_q_id, 'B', v_row->>'option_b', v_correct_letter = 'B'),
+      (v_q_id, 'C', v_row->>'option_c', v_correct_letter = 'C'),
+      (v_q_id, 'D', v_row->>'option_d', v_correct_letter = 'D');
+
+    v_imported_count := v_imported_count + 1;
+  END LOOP;
+
+  -- Finalize audit log
+  UPDATE public.bulk_imports
+  SET imported_rows = v_imported_count,
+      status = 'completed'
+  WHERE id = v_import_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'import_id', v_import_id,
+    'imported_count', v_imported_count
+  );
+EXCEPTION WHEN OTHERS THEN
+  -- PL/pgSQL automatically rolls back all inserts in this transaction if an exception occurs
+  RAISE EXCEPTION 'Atomic import transaction failed: %', SQLERRM;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

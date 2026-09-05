@@ -6,6 +6,7 @@ import { Footer } from '@/components/layout/Footer';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { ArrowLeft } from 'lucide-react';
 import { ExamLauncherButton } from '../ExamLauncherButton';
 
@@ -34,11 +35,25 @@ export default async function SubjectChaptersPage({ params }: ChaptersPageProps)
     if (tokenAcc) tokenBalance = tokenAcc.balance;
   }
 
-  const { data: subject } = await supabase
+  // Fetch subject detail with resilient admin fallback
+  let subject: any = null;
+  const { data: userSub } = await supabase
     .from('subjects')
     .select('*, exam_configs(*), chapters(*)')
     .eq('slug', slug)
     .single();
+
+  if (userSub) {
+    subject = userSub;
+  } else {
+    const adminClient = createAdminClient();
+    const { data: adminSub } = await adminClient
+      .from('subjects')
+      .select('*, exam_configs(*), chapters(*)')
+      .eq('slug', slug)
+      .single();
+    subject = adminSub;
+  }
 
   if (!subject) notFound();
 
