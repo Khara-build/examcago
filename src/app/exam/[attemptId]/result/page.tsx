@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { evaluateExamAttempt } from '@/lib/exam/grading';
 import { CheckCircle2, XCircle, RotateCcw, HelpCircle, FileText, Check, AlertCircle } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -91,23 +92,18 @@ export default async function ExamResultPage({ params }: ResultPageProps) {
     fullDbLarge = lgs || [];
   }
 
-  const totalQuestions = attemptQuestions?.length || 0;
-  const percentage = Math.round(((attempt.score || 0) / (attempt.total_marks || 100)) * 100);
+  // Single authoritative evaluation source of truth
+  const evaluation = evaluateExamAttempt(
+    attemptQuestions || [],
+    answers || [],
+    fullDbOptions,
+    fullDbScenarios,
+    fullDbLarge
+  );
 
-  let correctCount = 0;
-  let incorrectCount = 0;
-  let unansweredCount = 0;
-
-  (attemptQuestions || []).forEach((qItem) => {
-    const uAns = answers?.find((a) => a.question_id === qItem.question_id);
-    if (!uAns || (!uAns.selected_option_id && !uAns.text_answer)) {
-      unansweredCount++;
-    } else if (uAns.is_correct) {
-      correctCount++;
-    } else {
-      incorrectCount++;
-    }
-  });
+  const displayScore = attempt.score !== null && attempt.score !== undefined ? attempt.score : evaluation.totalScore;
+  const displayMarks = attempt.total_marks || evaluation.totalMarks;
+  const percentage = Math.round((displayScore / displayMarks) * 100);
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-offwhite">
@@ -149,15 +145,15 @@ export default async function ExamResultPage({ params }: ResultPageProps) {
           {/* Metrics Breakdown Bar */}
           <div className="grid grid-cols-3 gap-3 mt-6 pt-4 border-t border-gray-200 text-center text-xs">
             <div className="p-2 rounded bg-green-50 border border-green-200 text-green-800">
-              <strong className="block text-base font-bold">{correctCount}</strong>
+              <strong className="block text-base font-bold">{evaluation.correctCount}</strong>
               <span>Correct Answers</span>
             </div>
             <div className="p-2 rounded bg-red-50 border border-red-200 text-red-800">
-              <strong className="block text-base font-bold">{incorrectCount}</strong>
+              <strong className="block text-base font-bold">{evaluation.incorrectCount}</strong>
               <span>Incorrect Answers</span>
             </div>
             <div className="p-2 rounded bg-gray-50 border border-gray-200 text-gray-700">
-              <strong className="block text-base font-bold">{unansweredCount}</strong>
+              <strong className="block text-base font-bold">{evaluation.unansweredCount}</strong>
               <span>Unanswered</span>
             </div>
           </div>
@@ -190,12 +186,15 @@ export default async function ExamResultPage({ params }: ResultPageProps) {
               const qType = qSnapshot.question_type || 'mcq';
               const userAnswer = answers?.find((a) => a.question_id === qItem.question_id);
               const selectedOptionId = userAnswer?.selected_option_id;
+              const qGrading = evaluation.questionGradings.find((g) => g.questionId === qItem.question_id);
+
+              const isAnswered = qGrading ? qGrading.isAnswered : false;
+              const marksObtained = qGrading ? qGrading.marksObtained : 0;
 
               // MCQ Review Logic
               const dbOpts = fullDbOptions.filter((o) => o.question_id === qItem.question_id);
               const optionsToRender = dbOpts.length > 0 ? dbOpts : (qSnapshot.options || []);
               const correctOption = optionsToRender.find((o: any) => o.is_correct);
-              const isUserCorrect = userAnswer?.is_correct || (selectedOptionId && correctOption && selectedOptionId === correctOption.id);
 
               return (
                 <Card key={qItem.id} className="border-gray-300 space-y-4">
@@ -208,10 +207,10 @@ export default async function ExamResultPage({ params }: ResultPageProps) {
                       <Badge variant="brand" className="capitalize">{qType}</Badge>
                     </div>
 
-                    {userAnswer?.marks_obtained !== undefined ? (
-                      userAnswer.marks_obtained > 0 ? (
+                    {isAnswered ? (
+                      marksObtained > 0 ? (
                         <Badge variant="success" className="gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" /> +{userAnswer.marks_obtained} Marks
+                          <CheckCircle2 className="h-3.5 w-3.5" /> +{marksObtained} Marks
                         </Badge>
                       ) : (
                         <Badge variant="danger" className="gap-1">

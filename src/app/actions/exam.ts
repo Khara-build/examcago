@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { revalidatePath } from 'next/cache';
+import { evaluateExamAttempt } from '@/lib/exam/grading';
 
 /**
  * Start an Exam Attempt using atomic DB procedure (start_exam_attempt_rpc)
@@ -149,147 +150,95 @@ export async function submitExamAttemptAction(
     .eq('attempt_id', attemptId)
     .order('question_order', { ascending: true });
 
-  let totalScore = 0;
-
-  if (attemptQuestions && attemptQuestions.length > 0) {
-    for (const qItem of attemptQuestions) {
-      const qSnapshot = qItem.question_snapshot || {};
-      const qType = qSnapshot.question_type || 'mcq';
-      const userAnswer = answers?.find((a) => a.question_id === qItem.question_id);
-
-      if (qType === 'mcq') {
-        if (userAnswer && userAnswer.selected_option_id) {
-          // Fetch authoritative correct option from database
-          const { data: correctOption } = await adminClient
-            .from('question_options')
-            .select('id')
-            .eq('question_id', qItem.question_id)
-            .eq('is_correct', true)
-            .maybeSingle();
-
-          const isCorrect = !!(correctOption && correctOption.id === userAnswer.selected_option_id);
-          const marksObtained = isCorrect ? (qItem.marks || 2) : 0;
-          totalScore += marksObtained;
-
-          await adminClient
-            .from('attempt_answers')
-            .update({
-              is_correct: isCorrect,
-              marks_obtained: marksObtained,
-            })
-            .eq('id', userAnswer.id);
-        } else if (userAnswer) {
-          await adminClient
-            .from('attempt_answers')
-            .update({
-              is_correct: false,
-              marks_obtained: 0,
-            })
-            .eq('id', userAnswer.id);
-        }
-      } else if (qType === 'scenario') {
-        // Evaluate Scenario sub-questions
-        if (userAnswer) {
-          const { data: scenData } = await adminClient
-            .from('scenario_questions')
-            .select('sub_questions')
-            .eq('question_id', qItem.question_id)
-            .maybeSingle();
-
-          let scenMarks = 0;
-          let isCorrect = false;
-
-          if (scenData && scenData.sub_questions && Array.isArray(scenData.sub_questions)) {
-            let parsedUserAns: Record<string, string> = {};
-            try {
-              if (userAnswer.text_answer) {
-                parsedUserAns = JSON.parse(userAnswer.text_answer);
-              }
-            } catch (e) {
-              parsedUserAns = {};
-            }
-
-            const totalSub = scenData.sub_questions.length;
-            const marksPerSub = (qItem.marks || 15) / (totalSub || 1);
-            let correctSubCount = 0;
-
-            scenData.sub_questions.forEach((sq: any) => {
-              const uChoice = parsedUserAns[sq.id];
-              if (uChoice && sq.correct_answer && uChoice.trim().toUpperCase() === sq.correct_answer.trim().toUpperCase()) {
-                correctSubCount += 1;
-              }
-            });
-
-            scenMarks = Math.round(correctSubCount * marksPerSub * 100) / 100;
-            isCorrect = correctSubCount === totalSub;
-          }
-
-          totalScore += scenMarks;
-
-          await adminClient
-            .from('attempt_answers')
-            .update({
-              is_correct: isCorrect,
-              marks_obtained: scenMarks,
-            })
-            .eq('id', userAnswer.id);
-        }
-      } else if (qType === 'large') {
-        // Evaluate 20-mark Large Accounting question
-        if (userAnswer && userAnswer.text_answer) {
-          const { data: largeData } = await adminClient
-            .from('large_questions')
-            .select('question_data')
-            .eq('question_id', qItem.question_id)
-            .maybeSingle();
-
-          let largeMarks = 0;
-          const maxMarks = qItem.marks || 20;
-
-          if (largeData && largeData.question_data && largeData.question_data.solution_key) {
-            const expectedText = String(largeData.question_data.solution_key).toLowerCase();
-            const userText = userAnswer.text_answer.toLowerCase();
-
-            if (userText.includes(expectedText) || expectedText.includes(userText)) {
-              largeMarks = maxMarks;
-            } else if (userAnswer.text_answer.trim().length > 50) {
-              largeMarks = Math.round(maxMarks * 0.75); // Award partial credit for comprehensive attempt
-            }
-          } else if (userAnswer.text_answer.trim().length > 30) {
-            largeMarks = Math.round(maxMarks * 0.7);
-          }
-
-          totalScore += largeMarks;
-
-          await adminClient
-            .from('attempt_answers')
-            .update({
-              is_correct: largeMarks >= (maxMarks * 0.5),
-              marks_obtained: largeMarks,
-            })
-            .eq('id', userAnswer.id);
-        }
-      }
-    }
+  if (!attemptQuestions || attemptQuestions.length === 0) {
+    return { error: 'No questions found for this attempt.' };
   }
 
-  const isPassed = totalScore >= (attempt.total_marks * 0.5);
+  // Fetch MCQ options
+  const mcqQuestionIds = attemptQuestions
+    .filter((q) => (q.question_snapshot?.question_type || 'mcq') === 'mcq')
+    .map((q) => q.question_id);
+
+  let fullDbOptions: any[] = [];
+  if (mcqQuestionIds.length > 0) {
+    const { data: opts } = await adminClient
+      .from('question_options')
+      .select('*')
+      .in('question_id', mcqQuestionIds);
+    fullDbOptions = opts || [];
+  }
+
+  // Fetch Scenario data
+  const scenarioQuestionIds = attemptQuestions
+    .filter((q) => q.question_snapshot?.question_type === 'scenario')
+    .map((q) => q.question_id);
+
+  let fullDbScenarios: any[] = [];
+  if (scenarioQuestionIds.length > 0) {
+    const { data: scens } = await adminClient
+      .from('scenario_questions')
+      .select('*')
+      .in('question_id', scenarioQuestionIds);
+    fullDbScenarios = scens || [];
+  }
+
+  // Fetch Large Question data
+  const largeQuestionIds = attemptQuestions
+    .filter((q) => q.question_snapshot?.question_type === 'large')
+    .map((q) => q.question_id);
+
+  let fullDbLarge: any[] = [];
+  if (largeQuestionIds.length > 0) {
+    const { data: lgs } = await adminClient
+      .from('large_questions')
+      .select('*')
+      .in('question_id', largeQuestionIds);
+    fullDbLarge = lgs || [];
+  }
+
+  // 3. Authoritative Unified Evaluation
+  const evaluation = evaluateExamAttempt(
+    attemptQuestions,
+    answers || [],
+    fullDbOptions,
+    fullDbScenarios,
+    fullDbLarge
+  );
+
+  // 4. Parallel batch updates to attempt_answers
+  const updatePromises = evaluation.questionGradings.map((grading) => {
+    const userAns = answers?.find((a) => a.question_id === grading.questionId);
+    if (userAns) {
+      return adminClient
+        .from('attempt_answers')
+        .update({
+          is_correct: grading.isCorrect,
+          marks_obtained: grading.marksObtained,
+        })
+        .eq('id', userAns.id);
+    }
+    return Promise.resolve(null);
+  });
+
+  await Promise.all(updatePromises);
+
   const finalStatus = isAutoSubmit ? 'auto_submitted' : 'submitted';
 
-  // 3. Finalize Attempt
+  // 5. Finalize Attempt
   await adminClient
     .from('exam_attempts')
     .update({
       status: finalStatus,
       completed_at: new Date().toISOString(),
-      score: totalScore,
-      is_passed: isPassed,
+      score: evaluation.totalScore,
+      is_passed: evaluation.isPassed,
     })
     .eq('id', attemptId);
 
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/history');
   revalidatePath(`/exam/${attemptId}`);
+  revalidatePath(`/exam/${attemptId}/result`);
 
-  return { success: true, score: totalScore, isPassed };
+  return { success: true, score: evaluation.totalScore, isPassed: evaluation.isPassed };
 }
