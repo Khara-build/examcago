@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { submitExamAttemptAction } from '@/app/actions/exam';
+import { getAttemptWithServerTime } from '@/lib/exam/timer';
 import { Metadata } from 'next';
 import { ExamWorkspace } from './ExamWorkspace';
 
@@ -33,29 +34,27 @@ export default async function ExamPage({ params }: ExamPageProps) {
     redirect(`/login?redirect=/exam/${attemptId}`);
   }
 
-  const adminClient = createAdminClient();
+  // Fetch Attempt with authoritative server time synchronization
+  const attemptResult = await getAttemptWithServerTime(attemptId);
 
-  // Fetch Attempt
-  const { data: attempt } = await adminClient
-    .from('exam_attempts')
-    .select('*, subject:subjects(*)')
-    .eq('id', attemptId)
-    .single();
-
-  if (!attempt || attempt.user_id !== user.id) {
+  if (!attemptResult || !attemptResult.attempt || attemptResult.attempt.user_id !== user.id) {
     notFound();
   }
+
+  const { attempt, remainingSeconds } = attemptResult;
 
   // Redirect to results if already submitted or auto-submitted
   if (attempt.status === 'submitted' || attempt.status === 'auto_submitted') {
     redirect(`/exam/${attemptId}/result`);
   }
 
-  // Check if deadline has passed while student was away
-  if (new Date() > new Date(attempt.expires_at)) {
+  // Check if deadline has passed while student was away (authoritative server-time comparison)
+  if (remainingSeconds <= 0) {
     await submitExamAttemptAction(attemptId, true);
     redirect(`/exam/${attemptId}/result`);
   }
+
+  const adminClient = createAdminClient();
 
   // Fetch Attempt Questions ordered
   const { data: questions } = await adminClient
@@ -84,6 +83,7 @@ export default async function ExamPage({ params }: ExamPageProps) {
       attempt={attempt}
       initialQuestions={sanitizedQuestions}
       initialAnswers={answers || []}
+      initialRemainingSeconds={remainingSeconds}
     />
   );
 }

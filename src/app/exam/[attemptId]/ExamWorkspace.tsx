@@ -25,12 +25,14 @@ interface ExamWorkspaceProps {
   attempt: any;
   initialQuestions: any[];
   initialAnswers: any[];
+  initialRemainingSeconds?: number;
 }
 
 export function ExamWorkspace({
   attempt,
   initialQuestions,
   initialAnswers,
+  initialRemainingSeconds,
 }: ExamWorkspaceProps) {
   const router = useRouter();
 
@@ -53,30 +55,36 @@ export function ExamWorkspace({
     return map;
   });
 
-  // Calculate remaining seconds based on server expires_at
+  // Calculate remaining seconds based on authoritative server time
   const [remainingSeconds, setRemainingSeconds] = useState<number>(() => {
+    if (typeof initialRemainingSeconds === 'number') {
+      return Math.max(0, initialRemainingSeconds);
+    }
+    const maxSec = (attempt.duration_minutes || 90) * 60;
     const expires = new Date(attempt.expires_at).getTime();
-    const now = Date.now();
-    return Math.max(0, Math.floor((expires - now) / 1000));
+    return Math.max(0, Math.min(maxSec, Math.floor((expires - Date.now()) / 1000)));
   });
 
-  // Server Countdown Timer Effect
+  // Server-Synchronized Countdown Timer Effect using monotonic clock
   useEffect(() => {
     if (remainingSeconds <= 0) {
       handleAutoSubmit();
       return;
     }
 
+    const mountTime = performance.now();
+    const startRemaining = remainingSeconds;
+
     const timer = setInterval(() => {
-      setRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleAutoSubmit();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+      const elapsedSeconds = Math.floor((performance.now() - mountTime) / 1000);
+      const current = Math.max(0, startRemaining - elapsedSeconds);
+      setRemainingSeconds(current);
+
+      if (current <= 0) {
+        clearInterval(timer);
+        handleAutoSubmit();
+      }
+    }, 500);
 
     return () => clearInterval(timer);
   }, []);
