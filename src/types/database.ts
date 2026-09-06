@@ -2,7 +2,7 @@ export type UserRole = 'student' | 'admin';
 export type QuestionType = 'mcq' | 'scenario' | 'large';
 export type ExamType = 'chapter' | 'full_book';
 export type AttemptStatus = 'in_progress' | 'submitted' | 'auto_submitted' | 'expired' | 'cancelled';
-export type TransactionType = 'welcome_bonus' | 'daily_claim' | 'exam_deduction' | 'referral_bonus' | 'admin_grant' | 'refund';
+export type TransactionType = 'welcome_bonus' | 'daily_claim' | 'exam_deduction' | 'referral_bonus' | 'admin_grant' | 'refund' | 'purchase';
 export type ImportFileType = 'xlsx' | 'csv' | 'json';
 export type ImportStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

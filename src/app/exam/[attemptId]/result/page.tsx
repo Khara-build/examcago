@@ -10,8 +10,17 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { evaluateExamAttempt } from '@/lib/exam/grading';
 import { CheckCircle2, XCircle, RotateCcw, HelpCircle, FileText, Check, AlertCircle } from 'lucide-react';
+import { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Exam Attempt Result',
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 interface ResultPageProps {
   params: Promise<{

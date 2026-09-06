@@ -20,7 +20,7 @@ export function Footer() {
             </p>
             <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-md border border-emerald-200 w-fit">
               <ShieldCheck className="h-4 w-4" />
-              <span>Official ICAB Syllabus Aligned Architecture</span>
+              <span>ICAB Certificate Level Syllabus Aligned</span>
             </div>
           </div>
 
@@ -42,7 +42,7 @@ export function Footer() {
               </li>
               <li>
                 <Link href="/subjects/business-technology-and-finance" className="hover:text-brand-red transition-colors">
-                  Business Technology & Finance
+                  Business Technology and Finance
                 </Link>
               </li>
               <li>
@@ -55,35 +55,49 @@ export function Footer() {
                   Assurance
                 </Link>
               </li>
+              <li>
+                <Link href="/subjects/business-law" className="hover:text-brand-red transition-colors">
+                  Business Law
+                </Link>
+              </li>
+              <li>
+                <Link href="/subjects/information-technology" className="hover:text-brand-red transition-colors">
+                  Information Technology
+                </Link>
+              </li>
             </ul>
           </div>
 
-          {/* Student Portal & Compliance */}
+          {/* Platform & Legal */}
           <div>
             <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-900 mb-4">
               Platform & Legal
             </h4>
             <ul className="space-y-2.5 text-sm">
               <li>
-                <Link href="/register" className="hover:text-brand-red transition-colors">
-                  Student Registration
+                <Link href="/about" className="hover:text-brand-red transition-colors">
+                  About Us
                 </Link>
               </li>
               <li>
-                <Link href="/login" className="hover:text-brand-red transition-colors">
-                  Student Sign In
+                <Link href="/contact" className="hover:text-brand-red transition-colors">
+                  Contact Support
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy" className="hover:text-brand-red transition-colors">
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/terms" className="hover:text-brand-red transition-colors">
+                  Terms of Service
                 </Link>
               </li>
               <li>
                 <Link href="/subjects" className="hover:text-brand-red transition-colors">
                   All 7 Subjects
                 </Link>
-              </li>
-              <li className="pt-2 text-xs text-gray-400">
-                Domain: <strong className="text-gray-600">examcago.com</strong>
-              </li>
-              <li className="text-xs text-gray-400">
-                Language: <span className="text-gray-700 font-medium">English Only</span>
               </li>
             </ul>
           </div>

@@ -3,9 +3,18 @@ import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { submitExamAttemptAction } from '@/app/actions/exam';
+import { Metadata } from 'next';
 import { ExamWorkspace } from './ExamWorkspace';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Active Examination Session',
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 interface ExamPageProps {
   params: Promise<{

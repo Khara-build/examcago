@@ -1,5 +1,8 @@
-﻿node_modules/
+node_modules/
 .next/
+.env
 .env.local
 .env*.local
 *.log
+scratch/
+.DS_Store

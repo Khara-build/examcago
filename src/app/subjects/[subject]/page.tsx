@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { startExamAttemptAction } from '@/app/actions/exam';
+import { Metadata } from 'next';
 import { BookOpen, Clock, Award, Play, CheckCircle2, Coins, ArrowLeft, AlertTriangle, Upload } from 'lucide-react';
 import { ExamLauncherButton } from './ExamLauncherButton';
 
@@ -18,6 +19,40 @@ interface SubjectPageProps {
   params: Promise<{
     subject: string;
   }>;
+}
+
+export async function generateMetadata({ params }: SubjectPageProps): Promise<Metadata> {
+  const resolvedParams = await params;
+  const slug = resolvedParams.subject;
+
+  const adminClient = createAdminClient();
+  const { data: subject } = await adminClient
+    .from('subjects')
+    .select('name, code, description')
+    .eq('slug', slug)
+    .maybeSingle();
+
+  if (!subject) {
+    return {
+      title: 'Subject Not Found',
+    };
+  }
+
+  const title = `${subject.name} (${subject.code}) Exam Prep & Question Bank`;
+  const description = subject.description || `Prepare for ICAB Certificate Level ${subject.name} with chapter tests, full book mock exams, and real examination simulation.`;
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: `https://examcago.com/subjects/${slug}`,
+    },
+    openGraph: {
+      title: `${title} — EXAM CAGO`,
+      description,
+      url: `https://examcago.com/subjects/${slug}`,
+    },
+  };
 }
 
 export default async function SubjectDetailPage({ params }: SubjectPageProps) {

@@ -7,9 +7,23 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { Metadata } from 'next';
 import { Clock, ArrowRight, AlertCircle, Database } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'All ICAB Certificate Level Subjects & Syllabuses',
+  description: 'Explore all 7 ICAB Certificate Level subjects: Accounting, Management Information, Business Technology and Finance, Taxation, Assurance, Business Law, and Information Technology.',
+  alternates: {
+    canonical: 'https://examcago.com/subjects',
+  },
+  openGraph: {
+    title: 'All ICAB Certificate Level Subjects — EXAM CAGO',
+    description: 'Explore full syllabuses, chapters, and mock exam formats for all 7 ICAB Certificate Level subjects.',
+    url: 'https://examcago.com/subjects',
+  },
+};
 
 export default async function SubjectsPage() {
   const supabase = await createClient();

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/server';
+import { Metadata } from 'next';
 import { 
   BookOpen, 
   Clock, 
@@ -17,6 +18,19 @@ import {
   Zap, 
   Users 
 } from 'lucide-react';
+
+export const metadata: Metadata = {
+  title: 'Master Your ICAB Exams Online — Practice MCQs & Full Book Mocks',
+  description: 'Practice all 85 syllabus chapters across 7 ICAB Certificate Level subjects with realistic exam simulation, instant scoring, and comprehensive explanations.',
+  alternates: {
+    canonical: 'https://examcago.com',
+  },
+  openGraph: {
+    title: 'Master Your ICAB Exams Online — EXAM CAGO',
+    description: 'Premier question bank and mock examination portal for ICAB Certificate Level candidates in Bangladesh.',
+    url: 'https://examcago.com',
+  },
+};
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -105,7 +119,7 @@ export default async function HomePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-brand-red" />
-                  <span>Daily Free Tokens</span>
+                  <span>1 Free Daily Token</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-brand-red" />
@@ -121,7 +135,7 @@ export default async function HomePage() {
                   <div className="flex items-center justify-between pb-3 border-b border-gray-100">
                     <div className="flex items-center gap-2">
                       <Award className="h-5 w-5 text-brand-red" />
-                      <span className="font-semibold text-gray-900">Certificate Level Suite</span>
+                      <span className="font-semibold text-gray-900">ICAB Certificate Level Exam Prep</span>
                     </div>
                     <Badge variant="brand">100% English</Badge>
                   </div>
@@ -139,7 +153,7 @@ export default async function HomePage() {
                       <Coins className="h-5 w-5 text-brand-red mt-0.5" />
                       <div>
                         <div className="text-xs font-bold text-gray-900">1 Free Daily Token</div>
-                        <div className="text-xs text-gray-500">Claim 1 free exam attempt token every single day automatically.</div>
+                        <div className="text-xs text-gray-500">Claim 1 free exam token every day.</div>
                       </div>
                     </div>
 

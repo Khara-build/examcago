@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { Metadata } from 'next';
 import { ArrowLeft } from 'lucide-react';
 import { ExamLauncherButton } from '../ExamLauncherButton';
 
@@ -16,6 +17,40 @@ interface ChaptersPageProps {
   params: Promise<{
     subject: string;
   }>;
+}
+
+export async function generateMetadata({ params }: ChaptersPageProps): Promise<Metadata> {
+  const resolvedParams = await params;
+  const slug = resolvedParams.subject;
+
+  const adminClient = createAdminClient();
+  const { data: subject } = await adminClient
+    .from('subjects')
+    .select('name, code')
+    .eq('slug', slug)
+    .maybeSingle();
+
+  if (!subject) {
+    return {
+      title: 'Subject Chapters Not Found',
+    };
+  }
+
+  const title = `${subject.name} (${subject.code}) Chapter Breakdown & Syllabus`;
+  const description = `Complete chapter-by-chapter syllabus breakdown and practice test access for ICAB ${subject.name}.`;
+
+  return {
+    title,
+    description,
+    alternates: {
+      canonical: `https://examcago.com/subjects/${slug}/chapters`,
+    },
+    openGraph: {
+      title: `${title} — EXAM CAGO`,
+      description,
+      url: `https://examcago.com/subjects/${slug}/chapters`,
+    },
+  };
 }
 
 export default async function SubjectChaptersPage({ params }: ChaptersPageProps) {
