@@ -170,18 +170,29 @@ export function ExamWorkspace({
 
   // Toggle Flag Question
   async function handleToggleFlag() {
+    if (!currentQItem?.question_id) return;
     const qId = currentQItem.question_id;
-    const newFlagged = !currentAnswer.isFlagged;
 
-    const updated = {
-      ...answersMap,
-      [qId]: {
-        ...currentAnswer,
-        isFlagged: newFlagged,
-      },
-    };
-    setAnswersMap(updated);
-    await persistAnswer(qId, currentAnswer.selectedOptionId, currentAnswer.textAnswer, newFlagged);
+    let targetFlagged = false;
+    let selectedOptionId: string | null = null;
+    let textAnswer: string | null = null;
+
+    setAnswersMap((prev) => {
+      const existing = prev[qId] || { selectedOptionId: null, textAnswer: null, isFlagged: false };
+      targetFlagged = !existing.isFlagged;
+      selectedOptionId = existing.selectedOptionId;
+      textAnswer = existing.textAnswer;
+
+      return {
+        ...prev,
+        [qId]: {
+          ...existing,
+          isFlagged: targetFlagged,
+        },
+      };
+    });
+
+    await persistAnswer(qId, selectedOptionId, textAnswer, targetFlagged);
   }
 
   // Confirm manual submission
@@ -287,29 +298,31 @@ export function ExamWorkspace({
         <main className="md:col-span-8 lg:col-span-9 flex flex-col justify-between space-y-6">
           <div className="bg-white p-6 rounded-lg border border-gray-300 shadow-sm space-y-6">
             {/* Question Header & Controls */}
-            <div className="flex items-center justify-between pb-4 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-brand-red bg-red-50 border border-red-200 px-3 py-1 rounded">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-gray-200">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs sm:text-sm font-bold text-brand-red bg-red-50 border border-red-200 px-2.5 sm:px-3 py-1 rounded whitespace-nowrap">
                   Question {currentIndex + 1} of {initialQuestions.length}
                 </span>
-                <Badge variant="neutral">
+                <Badge variant="neutral" className="whitespace-nowrap">
                   {currentQItem?.marks || 2} Marks
                 </Badge>
-                <Badge variant="brand" className="capitalize">
+                <Badge variant="brand" className="capitalize whitespace-nowrap">
                   {qType}
                 </Badge>
               </div>
 
               <button
+                type="button"
                 onClick={handleToggleFlag}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
+                aria-pressed={currentAnswer.isFlagged}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors shrink-0 touch-manipulation cursor-pointer select-none ${
                   currentAnswer.isFlagged
                     ? 'bg-amber-100 text-amber-800 border-amber-300'
-                    : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+                    : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100 active:bg-gray-200'
                 }`}
               >
-                <Flag className={`h-3.5 w-3.5 ${currentAnswer.isFlagged ? 'fill-amber-600 text-amber-700' : ''}`} />
-                <span>{currentAnswer.isFlagged ? 'Flagged' : 'Flag Question'}</span>
+                <Flag className={`h-3.5 w-3.5 pointer-events-none ${currentAnswer.isFlagged ? 'fill-amber-600 text-amber-700' : ''}`} />
+                <span className="pointer-events-none">{currentAnswer.isFlagged ? 'Flagged' : 'Flag Question'}</span>
               </button>
             </div>
 
@@ -583,11 +596,36 @@ export function ExamWorkspace({
               </button>
             </div>
 
+            {/* Status Legend */}
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600 pb-2 border-b border-gray-100">
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded bg-green-600 inline-block"></span>
+                <span>Answered ({answeredCount})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded bg-gray-200 border border-gray-400 inline-block"></span>
+                <span>Unanswered</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded bg-amber-500 inline-block"></span>
+                <span>Flagged ({flaggedCount})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded border-2 border-brand-red inline-block"></span>
+                <span>Current</span>
+              </div>
+            </div>
+
             <div className="grid grid-cols-5 gap-2">
               {initialQuestions.map((q, idx) => {
                 const ans = answersMap[q.question_id];
                 const isCurrent = idx === currentIndex;
                 const isAns = isQuestionAnswered(ans);
+                const isFlagged = ans && ans.isFlagged;
+
+                let bgClass = 'bg-gray-100 text-gray-800 border-gray-300';
+                if (isAns) bgClass = 'bg-green-600 text-white border-green-700 font-bold';
+                if (isFlagged) bgClass = 'bg-amber-500 text-white border-amber-600 font-bold';
 
                 return (
                   <button
@@ -596,11 +634,14 @@ export function ExamWorkspace({
                       setCurrentIndex(idx);
                       setShowMobileGrid(false);
                     }}
-                    className={`flex h-10 w-full items-center justify-center rounded text-xs font-bold border ${
-                      isAns ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'
-                    } ${isCurrent ? 'ring-2 ring-brand-red' : ''}`}
+                    className={`relative flex h-10 w-full items-center justify-center rounded text-xs font-semibold border transition-all ${bgClass} ${
+                      isCurrent ? 'ring-2 ring-brand-red ring-offset-1 border-brand-red font-extrabold scale-105 z-10' : ''
+                    }`}
                   >
                     {idx + 1}
+                    {isFlagged && (
+                      <span className="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 border border-white"></span>
+                    )}
                   </button>
                 );
               })}
