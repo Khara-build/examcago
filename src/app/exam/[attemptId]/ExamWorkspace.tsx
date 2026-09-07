@@ -168,6 +168,32 @@ export function ExamWorkspace({
     await persistAnswer(qId, currentAnswer.selectedOptionId, text, currentAnswer.isFlagged);
   }
 
+  // Handle Large Question structured numerical field change
+  async function handleLargeFieldChange(fieldId: string, value: string) {
+    const qId = currentQItem.question_id;
+    let currentParsed: Record<string, string> = {};
+    try {
+      if (currentAnswer.textAnswer) {
+        currentParsed = JSON.parse(currentAnswer.textAnswer);
+      }
+    } catch (e) {
+      currentParsed = {};
+    }
+
+    currentParsed[fieldId] = value;
+    const jsonStr = JSON.stringify(currentParsed);
+
+    const updated = {
+      ...answersMap,
+      [qId]: {
+        ...currentAnswer,
+        textAnswer: jsonStr,
+      },
+    };
+    setAnswersMap(updated);
+    await persistAnswer(qId, currentAnswer.selectedOptionId, jsonStr, currentAnswer.isFlagged);
+  }
+
   // Toggle Flag Question
   async function handleToggleFlag() {
     if (!currentQItem?.question_id) return;
@@ -215,7 +241,17 @@ export function ExamWorkspace({
   const isQuestionAnswered = (ans: any) => {
     if (!ans) return false;
     if (ans.selectedOptionId !== null) return true;
-    if (ans.textAnswer !== null && ans.textAnswer.trim() !== '') return true;
+    if (ans.textAnswer !== null && ans.textAnswer.trim() !== '') {
+      try {
+        const parsed = JSON.parse(ans.textAnswer);
+        if (typeof parsed === 'object' && parsed !== null) {
+          return Object.values(parsed).some((v) => typeof v === 'string' && v.trim() !== '');
+        }
+      } catch (e) {
+        // Plain text answer
+      }
+      return true;
+    }
     return false;
   };
 
@@ -457,21 +493,93 @@ export function ExamWorkspace({
                   {qSnapshot.question_text}
                 </div>
 
-                <div className="space-y-2 pt-2">
-                  <label className="block text-xs font-bold text-gray-700">
-                    Student Workspace Response & Computations:
-                  </label>
-                  <textarea
-                    value={currentAnswer.textAnswer || ''}
-                    onChange={(e) => handleLargeTextChange(e.target.value)}
-                    placeholder="Enter double-entry journal adjustments, trial balance calculations, or structured financial report details here..."
-                    className="w-full p-4 rounded-lg border border-gray-300 text-sm font-mono focus:ring-2 focus:ring-brand-red focus:outline-none leading-relaxed"
-                    rows={10}
-                  />
-                  <span className="text-[11px] text-gray-500 italic block text-right">
-                    Auto-saved continuously to server workspace.
-                  </span>
-                </div>
+                {/* Structured numerical fields if defined, else generic workspace */}
+                {qSnapshot.question_data?.fields && Array.isArray(qSnapshot.question_data.fields) ? (
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center justify-between pb-1 border-b border-gray-200">
+                      <label className="block text-xs font-bold text-gray-800 uppercase tracking-wider">
+                        Required Numerical Answers (Exact Evaluation):
+                      </label>
+                      <span className="text-[11px] font-semibold text-brand-red bg-red-50 border border-red-200 px-2 py-0.5 rounded">
+                        Total {qSnapshot.question_data.fields.reduce((sum: number, f: any) => sum + (Number(f.marks) || 0), 0) || 20} Marks
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      {qSnapshot.question_data.fields.map((field: any) => {
+                        let parsedMap: Record<string, string> = {};
+                        try {
+                          if (currentAnswer.textAnswer) parsedMap = JSON.parse(currentAnswer.textAnswer);
+                        } catch (e) {
+                          parsedMap = {};
+                        }
+                        const val = parsedMap[field.id] || '';
+
+                        return (
+                          <div key={field.id} className="p-3 bg-white rounded-lg border border-gray-300 space-y-1.5 shadow-sm">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-gray-800">
+                                {field.label}
+                              </label>
+                              <Badge variant="neutral" className="text-[10px]">
+                                {field.marks} Marks
+                              </Badge>
+                            </div>
+                            {field.hint && (
+                              <p className="text-[11px] text-gray-500 leading-tight">
+                                {field.hint}
+                              </p>
+                            )}
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={val}
+                              onChange={(e) => handleLargeFieldChange(field.id, e.target.value)}
+                              placeholder="Enter numerical amount..."
+                              className="w-full p-2.5 rounded border border-gray-300 text-sm font-mono focus:ring-2 focus:ring-brand-red focus:outline-none"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-1.5 pt-2">
+                      <label className="block text-[11px] font-bold text-gray-600">
+                        Optional Working Notes:
+                      </label>
+                      <textarea
+                        value={(() => {
+                          try {
+                            const p = JSON.parse(currentAnswer.textAnswer || '{}');
+                            return p._workings || '';
+                          } catch {
+                            return '';
+                          }
+                        })()}
+                        onChange={(e) => handleLargeFieldChange('_workings', e.target.value)}
+                        placeholder="Optional scratchpad for your journal entries or calculations..."
+                        className="w-full p-3 rounded-lg border border-gray-300 text-xs font-mono focus:ring-1 focus:ring-brand-red focus:outline-none"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 pt-2">
+                    <label className="block text-xs font-bold text-gray-700">
+                      Student Workspace Response & Computations:
+                    </label>
+                    <textarea
+                      value={currentAnswer.textAnswer || ''}
+                      onChange={(e) => handleLargeTextChange(e.target.value)}
+                      placeholder="Enter double-entry journal adjustments, trial balance calculations, or structured financial report details here..."
+                      className="w-full p-4 rounded-lg border border-gray-300 text-sm font-mono focus:ring-2 focus:ring-brand-red focus:outline-none leading-relaxed"
+                      rows={10}
+                    />
+                    <span className="text-[11px] text-gray-500 italic block text-right">
+                      Auto-saved continuously to server workspace.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

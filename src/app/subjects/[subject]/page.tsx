@@ -112,6 +112,31 @@ export default async function SubjectDetailPage({ params }: SubjectPageProps) {
   const requiredCount = fullBookConfig?.mcq_count || 40;
   const isQuestionBankReady = availableCount >= requiredCount;
 
+  // Check special question availability (Accounting: Large; MI & TAX: Scenario)
+  let specialQuestionType: 'scenario' | 'large' | null = null;
+  let requiredSpecialCount = 0;
+  const subSlug = subject.slug?.toLowerCase() || '';
+  const subCode = subject.code?.toUpperCase() || '';
+
+  if (subCode === 'ACC' || subSlug === 'accounting') {
+    specialQuestionType = 'large';
+    requiredSpecialCount = 1;
+  } else if (subCode === 'MI' || subSlug === 'management-information' || subCode === 'TAX' || subSlug === 'taxation') {
+    specialQuestionType = 'scenario';
+    requiredSpecialCount = 2;
+  }
+
+  let activeSpecialCount = 0;
+  if (specialQuestionType) {
+    const { count: specialCount } = await adminClient
+      .from('questions')
+      .select('id', { count: 'exact', head: true })
+      .eq('subject_id', subject.id)
+      .eq('is_active', true)
+      .eq('question_type', specialQuestionType);
+    activeSpecialCount = specialCount || 0;
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-brand-offwhite">
       <Navbar user={user ? { email: user.email!, role: userRole } : null} tokens={tokenBalance} />
@@ -197,12 +222,16 @@ export default async function SubjectDetailPage({ params }: SubjectPageProps) {
               {fullBookConfig && (
                 <ExamLauncherButton
                   subjectId={subject.id}
+                  subjectCode={subject.code}
                   examConfigId={fullBookConfig.id}
                   isLoggedIn={!!user}
                   tokenBalance={tokenBalance}
                   availableQuestions={availableCount}
                   requiredQuestions={requiredCount}
                   isAdmin={userRole === 'admin'}
+                  specialQuestionType={specialQuestionType}
+                  specialQuestionCount={activeSpecialCount}
+                  requiredSpecialCount={requiredSpecialCount}
                 />
               )}
             </div>

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { evaluateExamAttempt } from '@/lib/exam/grading';
+import { evaluateExamAttempt, isExactNumericMatch } from '@/lib/exam/grading';
 import { CheckCircle2, XCircle, RotateCcw, HelpCircle, FileText, Check, AlertCircle } from 'lucide-react';
 import { Metadata } from 'next';
 
@@ -273,52 +273,140 @@ export default async function ExamResultPage({ params }: ResultPageProps) {
                   {qType === 'scenario' && (
                     <div className="space-y-4 pt-1">
                       <div className="p-3 bg-amber-50 rounded border border-amber-200 text-xs text-amber-900">
-                        <strong className="block font-semibold mb-1">{qSnapshot.scenario_title}</strong>
+                        <strong className="block font-semibold mb-1">{qSnapshot.scenario_title || 'Case Study Scenario'}</strong>
                         <p className="whitespace-pre-line leading-relaxed">{qSnapshot.scenario_text}</p>
                       </div>
 
-                      {qSnapshot.sub_questions?.map((sq: any, sIdx: number) => {
-                        let userChoiceMap: Record<string, string> = {};
-                        try {
-                          if (userAnswer?.text_answer) userChoiceMap = JSON.parse(userAnswer.text_answer);
-                        } catch (e) {
-                          userChoiceMap = {};
-                        }
-                        const uChoice = userChoiceMap[sq.id];
-                        const dbScen = fullDbScenarios.find((s) => s.question_id === qItem.question_id);
-                        const dbSub = dbScen?.sub_questions?.find((s: any) => s.id === sq.id);
-                        const correctKey = dbSub?.correct_answer || sq.correct_answer;
+                      <div className="space-y-3">
+                        {qSnapshot.sub_questions?.map((sq: any, sIdx: number) => {
+                          let userChoiceMap: Record<string, string> = {};
+                          try {
+                            if (userAnswer?.text_answer) userChoiceMap = JSON.parse(userAnswer.text_answer);
+                          } catch (e) {
+                            userChoiceMap = {};
+                          }
+                          const uChoice = userChoiceMap[sq.id]?.toUpperCase();
+                          const dbScen = fullDbScenarios.find((s) => s.question_id === qItem.question_id);
+                          const dbSub = dbScen?.sub_questions?.find((s: any) => s.id === sq.id);
+                          const correctKey = (dbSub?.correct_answer || sq.correct_answer)?.toUpperCase();
+                          const taskMarks = sIdx === 0 ? 3 : 2;
+                          const isCorrect = uChoice && correctKey && uChoice === correctKey;
 
-                        return (
-                          <div key={sq.id || sIdx} className="p-3 rounded border border-gray-200 bg-gray-50 text-xs space-y-1.5">
-                            <div className="flex items-center justify-between font-bold text-gray-900">
-                              <span>Task {sIdx + 1}: {sq.text}</span>
-                              <span className="text-gray-500 font-normal">
-                                Your Choice: <strong className={uChoice === correctKey ? 'text-green-700' : 'text-red-700'}>{uChoice || 'None'}</strong> | Correct: <strong className="text-green-700">{correctKey || 'N/A'}</strong>
-                              </span>
+                          return (
+                            <div key={sq.id || sIdx} className="p-3 rounded-lg border border-gray-200 bg-gray-50/80 text-xs space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-gray-900">
+                                  Task {sIdx + 1}: {sq.text}
+                                </span>
+                                <Badge variant={isCorrect ? 'success' : 'danger'} className="text-[10px]">
+                                  {isCorrect ? `+${taskMarks} Marks` : `0 / ${taskMarks} Marks`}
+                                </Badge>
+                              </div>
+
+                              <div className="flex items-center gap-4 text-xs text-gray-700 bg-white p-2 rounded border border-gray-200">
+                                <div>
+                                  Your Choice:{' '}
+                                  <strong className={isCorrect ? 'text-green-700' : 'text-red-700'}>
+                                    {uChoice || 'Not answered'}
+                                  </strong>
+                                </div>
+                                <div className="text-gray-300">|</div>
+                                <div>
+                                  Correct Answer:{' '}
+                                  <strong className="text-green-700">{correctKey || 'N/A'}</strong>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
 
                   {/* Large Question Review */}
-                  {qType === 'large' && (
-                    <div className="space-y-4 pt-1">
-                      <div className="p-3 bg-blue-50 rounded border border-blue-200 text-xs text-blue-900">
-                        <strong className="block font-semibold mb-1">{qSnapshot.case_title}</strong>
-                        <p className="whitespace-pre-line leading-relaxed font-mono">{qSnapshot.case_text}</p>
-                      </div>
+                  {qType === 'large' && (() => {
+                    const dbLg = fullDbLarge.find((l) => l.question_id === qItem.question_id);
+                    const fields = dbLg?.question_data?.fields || qSnapshot.question_data?.fields;
 
-                      <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs space-y-2">
-                        <strong className="block text-gray-700 font-bold">Your Submitted Answer:</strong>
-                        <p className="whitespace-pre-line font-mono bg-white p-2 rounded border border-gray-200 text-gray-800">
-                          {userAnswer?.text_answer || 'No response entered.'}
-                        </p>
+                    let parsedUserAnswers: Record<string, string> = {};
+                    try {
+                      if (userAnswer?.text_answer) {
+                        parsedUserAnswers = JSON.parse(userAnswer.text_answer);
+                      }
+                    } catch (e) {
+                      parsedUserAnswers = {};
+                    }
+
+                    return (
+                      <div className="space-y-4 pt-1">
+                        <div className="p-3 bg-blue-50 rounded border border-blue-200 text-xs text-blue-900">
+                          <strong className="block font-semibold mb-1">{qSnapshot.case_title || 'Accounting Problem Statement'}</strong>
+                          <p className="whitespace-pre-line leading-relaxed font-mono">{qSnapshot.case_text}</p>
+                        </div>
+
+                        {fields && Array.isArray(fields) && fields.length > 0 ? (
+                          <div className="space-y-2">
+                            <div className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                              Structured Numerical Evaluation Breakdown:
+                            </div>
+
+                            <div className="overflow-x-auto rounded-lg border border-gray-200">
+                              <table className="w-full text-xs text-left text-gray-700">
+                                <thead className="bg-gray-100 text-gray-800 font-bold border-b border-gray-200">
+                                  <tr>
+                                    <th className="p-2.5">Field</th>
+                                    <th className="p-2.5">Your Answer</th>
+                                    <th className="p-2.5">Correct Value</th>
+                                    <th className="p-2.5 text-right">Marks Awarded</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                  {fields.map((f: any) => {
+                                    const uVal = parsedUserAnswers[f.id];
+                                    const cVal = f.correct_value;
+                                    const isMatch = isExactNumericMatch(uVal, cVal);
+                                    const fMarks = Number(f.marks) || 0;
+                                    const awarded = isMatch ? fMarks : 0;
+
+                                    return (
+                                      <tr key={f.id} className={isMatch ? 'bg-green-50/40' : 'bg-red-50/20'}>
+                                        <td className="p-2.5 font-semibold text-gray-900">{f.label}</td>
+                                        <td className={`p-2.5 font-mono ${isMatch ? 'text-green-800 font-bold' : 'text-red-700'}`}>
+                                          {uVal !== undefined && uVal !== '' ? uVal : '—'}
+                                        </td>
+                                        <td className="p-2.5 font-mono text-green-800 font-bold">
+                                          {cVal !== undefined ? String(cVal) : 'N/A'}
+                                        </td>
+                                        <td className="p-2.5 text-right">
+                                          <span className={`inline-flex items-center gap-1 font-bold ${isMatch ? 'text-green-700' : 'text-red-700'}`}>
+                                            {isMatch ? `+${awarded} / ${fMarks}` : `0 / ${fMarks}`}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+
+                            {parsedUserAnswers._workings && (
+                              <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs space-y-1 mt-2">
+                                <strong className="text-gray-700 block font-semibold">Your Working Notes:</strong>
+                                <p className="whitespace-pre-line font-mono text-gray-700">{parsedUserAnswers._workings}</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-gray-50 rounded border border-gray-200 text-xs space-y-2">
+                            <strong className="block text-gray-700 font-bold">Your Submitted Answer:</strong>
+                            <p className="whitespace-pre-line font-mono bg-white p-2 rounded border border-gray-200 text-gray-800">
+                              {userAnswer?.text_answer || 'No response entered.'}
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Question Explanation */}
                   {qSnapshot.explanation && (

@@ -13,7 +13,8 @@ import { evaluateExamAttempt } from '@/lib/exam/grading';
 export async function startExamAttemptAction(
   subjectId: string,
   examConfigId: string,
-  chapterId: string | null = null
+  chapterId: string | null = null,
+  includeSpecial: boolean = false
 ) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -24,11 +25,62 @@ export async function startExamAttemptAction(
 
   const adminClient = createAdminClient();
 
+  // Mode resolution:
+  // Rule 1: Chapter Tests MUST ALWAYS be MCQ ONLY.
+  // Rule 2: Full Book Tests can include Special Questions if includeSpecial is true.
+  let targetConfigId = examConfigId;
+
+  if (chapterId) {
+    // Enforce MCQ only for Chapter Tests
+    const { data: stdConfig } = await adminClient
+      .from('exam_configs')
+      .select('id')
+      .eq('subject_id', subjectId)
+      .eq('scenario_count', 0)
+      .eq('large_count', 0)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (stdConfig?.id) {
+      targetConfigId = stdConfig.id;
+    }
+  } else if (includeSpecial) {
+    // Mode B: Full Book with Special Questions ON
+    const { data: specialConfig } = await adminClient
+      .from('exam_configs')
+      .select('id')
+      .eq('subject_id', subjectId)
+      .or('scenario_count.gt.0,large_count.gt.0')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (specialConfig?.id) {
+      targetConfigId = specialConfig.id;
+    }
+  } else {
+    // Mode A: Full Book with Special Questions OFF (Standard MCQ)
+    const { data: stdConfig } = await adminClient
+      .from('exam_configs')
+      .select('id')
+      .eq('subject_id', subjectId)
+      .eq('scenario_count', 0)
+      .eq('large_count', 0)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+
+    if (stdConfig?.id) {
+      targetConfigId = stdConfig.id;
+    }
+  }
+
   // Execute atomic RPC procedure for token deduction & attempt initialization
   const { data, error } = await adminClient.rpc('start_exam_attempt_rpc', {
     p_user_id: user.id,
     p_subject_id: subjectId,
-    p_exam_config_id: examConfigId,
+    p_exam_config_id: targetConfigId,
     p_chapter_id: chapterId || null,
   });
 

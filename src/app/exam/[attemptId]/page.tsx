@@ -66,7 +66,27 @@ export default async function ExamPage({ params }: ExamPageProps) {
   // Security: Sanitize question snapshots to prevent leaking explanations or answers to active test-takers
   const sanitizedQuestions = questions?.map((q: any) => {
     if (q.question_snapshot && typeof q.question_snapshot === 'object') {
-      const { explanation, ...cleanSnapshot } = q.question_snapshot;
+      const { explanation, correct_answer, ...cleanSnapshot } = q.question_snapshot;
+
+      // Sanitize sub_questions in scenario questions
+      if (Array.isArray(cleanSnapshot.sub_questions)) {
+        cleanSnapshot.sub_questions = cleanSnapshot.sub_questions.map((sq: any) => {
+          const { correct_answer: _ca, explanation: _exp, ...cleanSq } = sq;
+          return cleanSq;
+        });
+      }
+
+      // Sanitize structured numerical fields in large questions
+      if (cleanSnapshot.question_data && Array.isArray(cleanSnapshot.question_data.fields)) {
+        cleanSnapshot.question_data = {
+          ...cleanSnapshot.question_data,
+          fields: cleanSnapshot.question_data.fields.map((f: any) => {
+            const { correct_value: _cv, ...cleanField } = f;
+            return cleanField;
+          }),
+        };
+      }
+
       return { ...q, question_snapshot: cleanSnapshot };
     }
     return q;

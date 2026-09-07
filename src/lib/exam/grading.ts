@@ -39,6 +39,42 @@ export interface ExamEvaluation {
   questionGradings: QuestionGrading[];
 }
 
+/**
+ * Safe numeric normalization for exact numerical matching.
+ * Normalizes input by:
+ * - Trimming whitespace
+ * - Removing thousands separator commas (e.g. "55,000" -> "55000")
+ * - Validating that both operands are valid standard decimal numbers
+ * - Performing exact equality check without tolerance (no epsilon / no delta)
+ */
+export function isExactNumericMatch(userVal: any, correctVal: any): boolean {
+  if (userVal === undefined || userVal === null || correctVal === undefined || correctVal === null) {
+    return false;
+  }
+
+  const cleanUser = String(userVal).trim().replace(/,/g, '');
+  const cleanCorrect = String(correctVal).trim().replace(/,/g, '');
+
+  if (cleanUser === '' || cleanCorrect === '') {
+    return false;
+  }
+
+  // Accept valid integer or decimal numbers with optional sign
+  const numericPattern = /^-?\d+(\.\d+)?$/;
+  if (!numericPattern.test(cleanUser) || !numericPattern.test(cleanCorrect)) {
+    return false;
+  }
+
+  const userNum = Number(cleanUser);
+  const correctNum = Number(cleanCorrect);
+
+  if (isNaN(userNum) || isNaN(correctNum)) {
+    return false;
+  }
+
+  return userNum === correctNum;
+}
+
 export function evaluateExamAttempt(
   attemptQuestions: any[],
   answers: any[],
@@ -93,39 +129,68 @@ export function evaluateExamAttempt(
           userChoices = {};
         }
 
-        const totalSubs = subQuestions.length;
-        const marksPerSub = maxMarks / totalSubs;
-        let correctSubs = 0;
+        let totalEarned = 0;
+        let correctCountSubs = 0;
 
-        subQuestions.forEach((sq: any) => {
+        subQuestions.forEach((sq: any, sIdx: number) => {
           const uVal = userChoices[sq.id];
-          if (uVal && sq.correct_answer && uVal.trim().toUpperCase() === sq.correct_answer.trim().toUpperCase()) {
-            correctSubs++;
+          const correctKey = sq.correct_answer ? String(sq.correct_answer).trim().toUpperCase() : '';
+          // Task 1 = 3 marks, Tasks 2-7 = 2 marks (total 15 marks) if marks not explicitly specified
+          const subMarks = typeof sq.marks === 'number' ? sq.marks : (sIdx === 0 ? 3 : 2);
+
+          if (uVal && correctKey && String(uVal).trim().toUpperCase() === correctKey) {
+            totalEarned += subMarks;
+            correctCountSubs++;
           }
         });
 
-        marksObtained = Math.round(correctSubs * marksPerSub * 100) / 100;
-        isCorrect = correctSubs === totalSubs;
+        marksObtained = Math.min(maxMarks, totalEarned);
+        isCorrect = correctCountSubs === subQuestions.length;
       }
     } else if (qType === 'large') {
-      isAnswered = Boolean(textAnswer && textAnswer.trim() !== '');
+      isAnswered = Boolean(textAnswer && textAnswer.trim() !== '' && textAnswer.trim() !== '{}');
 
       const dbLarge = largeQuestions.find((l) => l.question_id === qItem.question_id);
-      const qData = dbLarge?.question_data || qSnapshot.question_data;
+      const qData = dbLarge?.question_data || qSnapshot.question_data || {};
+      const fields = qData.fields || [];
 
       if (isAnswered && textAnswer) {
-        const solutionKey = qData?.solution_key ? String(qData.solution_key).toLowerCase() : '';
-        const userText = textAnswer.toLowerCase();
+        if (Array.isArray(fields) && fields.length > 0) {
+          // Structured numerical answer fields
+          let userValues: Record<string, any> = {};
+          try {
+            userValues = JSON.parse(textAnswer);
+          } catch {
+            userValues = {};
+          }
 
-        if (solutionKey && (userText.includes(solutionKey) || solutionKey.includes(userText))) {
-          marksObtained = maxMarks;
-        } else if (textAnswer.trim().length > 50) {
-          marksObtained = Math.round(maxMarks * 0.75);
-        } else if (textAnswer.trim().length > 30) {
-          marksObtained = Math.round(maxMarks * 0.7);
+          let totalEarned = 0;
+          let correctFieldsCount = 0;
+
+          fields.forEach((f: any) => {
+            const rawUserVal = userValues[f.id];
+            const fieldMarks = typeof f.marks === 'number' ? f.marks : 2;
+
+            if (isExactNumericMatch(rawUserVal, f.correct_value)) {
+              totalEarned += fieldMarks;
+              correctFieldsCount++;
+            }
+          });
+
+          marksObtained = Math.min(maxMarks, totalEarned);
+          isCorrect = correctFieldsCount === fields.length;
+        } else {
+          // Fallback legacy exact solution key matching
+          const solutionKey = qData?.solution_key ? String(qData.solution_key).trim().toLowerCase() : '';
+          const cleanText = textAnswer.trim().toLowerCase();
+          if (solutionKey && cleanText === solutionKey) {
+            marksObtained = maxMarks;
+            isCorrect = true;
+          } else {
+            marksObtained = 0;
+            isCorrect = false;
+          }
         }
-
-        isCorrect = marksObtained >= (maxMarks * 0.5);
       }
     }
 
