@@ -60,10 +60,13 @@ export default async function TermsOfServicePage() {
           <section className="space-y-2">
             <h2 className="text-base font-bold text-gray-900 flex items-center gap-2">
               <FileText className="h-4 w-4 text-brand-red" />
-              2. Educational Purpose & Independence
+              2. Educational Purpose & Independence Disclaimer
             </h2>
             <p>
-              Exam CAGO is an independent online learning and practice portal designed to assist candidates preparing for the Institute of Chartered Accountants of Bangladesh (ICAB) Certificate Level examinations. While our content aligns with published syllabuses, Exam CAGO is an independent platform and does not officially confer ICAB credentials or official test certifications.
+              Exam CAGO is an entirely independent online learning and examination practice platform designed to assist candidates preparing for the Institute of Chartered Accountants of Bangladesh (ICAB) Certificate Level examinations.
+            </p>
+            <p>
+              Exam CAGO is not officially affiliated with, endorsed by, certified by, sponsored by, or operated by the Institute of Chartered Accountants of Bangladesh (ICAB). While our study materials, mock tests, and question banks are structured to align with the published ICAB Certificate Level syllabus, Exam CAGO does not administer official examinations or issue official ICAB qualifications or credentials.
             </p>
           </section>
 

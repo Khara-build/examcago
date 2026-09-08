@@ -548,22 +548,52 @@ export async function grantUserTokensAction(targetUserId: string, amount: number
   const { isAdmin, adminClient } = await checkAdminAuth();
   if (!isAdmin || !adminClient) return { error: 'Admin authorization required.' };
 
-  const { data: acc } = await adminClient.from('token_accounts').select('balance').eq('user_id', targetUserId).single();
-  const currentBalance = acc?.balance || 0;
+  // 1. Try atomic PostgreSQL RPC if available
+  try {
+    const { data: rpcRes, error: rpcErr } = await adminClient.rpc('grant_admin_tokens', {
+      p_target_user_id: targetUserId,
+      p_amount: amount,
+      p_description: description || 'Admin promotional grant',
+    });
+    if (!rpcErr && rpcRes && rpcRes.success) {
+      revalidatePath('/admin/tokens');
+      revalidatePath('/admin/users');
+      return { success: true, newBalance: rpcRes.new_balance };
+    }
+  } catch {
+    // Fall back to ledger-driven application logic
+  }
 
-  await adminClient.from('token_accounts').update({
-    balance: currentBalance + amount,
-    updated_at: new Date().toISOString(),
-  }).eq('user_id', targetUserId);
-
-  await adminClient.from('token_transactions').insert({
+  // 2. Insert transaction into authoritative ledger first
+  const { error: txError } = await adminClient.from('token_transactions').insert({
     user_id: targetUserId,
     amount,
     transaction_type: 'admin_grant',
-    description: description || 'Admin token adjustment',
+    description: description || 'Admin promotional grant',
   });
+
+  if (txError) {
+    return { error: txError.message };
+  }
+
+  // 3. Derive authoritative new balance directly from the entire transaction ledger sum
+  const { data: allUserTxs } = await adminClient
+    .from('token_transactions')
+    .select('amount')
+    .eq('user_id', targetUserId);
+
+  const authoritativeBalance = (allUserTxs || []).reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+  // 4. Update or insert token_accounts with the exact authoritative ledger balance
+  await adminClient
+    .from('token_accounts')
+    .upsert({
+      user_id: targetUserId,
+      balance: Math.max(0, authoritativeBalance),
+      updated_at: new Date().toISOString(),
+    });
 
   revalidatePath('/admin/tokens');
   revalidatePath('/admin/users');
-  return { success: true };
+  return { success: true, newBalance: authoritativeBalance };
 }

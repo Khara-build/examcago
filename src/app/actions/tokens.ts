@@ -26,6 +26,26 @@ export async function claimDailyTokenAction() {
   const todayBD = await getBangladeshDateString();
   const adminClient = createAdminClient();
 
+  // 1. Try atomic PostgreSQL RPC if available
+  try {
+    const { data: rpcRes, error: rpcErr } = await adminClient.rpc('claim_daily_token', {
+      p_user_id: user.id,
+      p_claim_date: todayBD,
+    });
+    if (!rpcErr && rpcRes) {
+      if (rpcRes.success) {
+        revalidatePath('/dashboard');
+        revalidatePath('/dashboard/tokens');
+        return { success: true, newBalance: rpcRes.new_balance };
+      } else if (rpcRes.error) {
+        return { error: rpcRes.error };
+      }
+    }
+  } catch {
+    // Fall back to concurrency-safe application logic
+  }
+
+  // 2. Concurrency-safe fallback:
   // Fetch current token account
   const { data: tokenAcc } = await adminClient
     .from('token_accounts')
@@ -41,21 +61,27 @@ export async function claimDailyTokenAction() {
     return { error: 'You have already claimed your free token for today. Please check back tomorrow!' };
   }
 
-  // Update balance & last claim date
-  const { error: updateError } = await adminClient
+  // Concurrency-safe conditional update: update ONLY IF last_daily_claim_date is still not todayBD
+  const { data: updatedRows, error: updateError } = await adminClient
     .from('token_accounts')
     .update({
       balance: tokenAcc.balance + 1,
       last_daily_claim_date: todayBD,
       updated_at: new Date().toISOString(),
     })
-    .eq('user_id', user.id);
+    .eq('user_id', user.id)
+    .or(`last_daily_claim_date.is.null,last_daily_claim_date.neq.${todayBD}`)
+    .select('balance');
 
   if (updateError) {
     return { error: updateError.message };
   }
 
-  // Record ledger transaction
+  if (!updatedRows || updatedRows.length === 0) {
+    return { error: 'You have already claimed your free token for today. Please check back tomorrow!' };
+  }
+
+  // Record ledger transaction atomically
   await adminClient.from('token_transactions').insert({
     user_id: user.id,
     amount: 1,
@@ -63,8 +89,26 @@ export async function claimDailyTokenAction() {
     description: `Daily free token claimed for ${todayBD} (BD Local Time)`,
   });
 
+  // Reconcile and derive authoritative balance directly from ledger sum
+  const { data: allTxs } = await adminClient
+    .from('token_transactions')
+    .select('amount')
+    .eq('user_id', user.id);
+
+  const authoritativeBalance = (allTxs || []).reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+  if (authoritativeBalance !== updatedRows[0]?.balance) {
+    await adminClient
+      .from('token_accounts')
+      .update({
+        balance: Math.max(0, authoritativeBalance),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', user.id);
+  }
+
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/tokens');
 
-  return { success: true, newBalance: tokenAcc.balance + 1 };
+  return { success: true, newBalance: authoritativeBalance };
 }

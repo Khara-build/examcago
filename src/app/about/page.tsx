@@ -74,8 +74,8 @@ export default async function AboutPage() {
                 <p className="text-gray-600">Accounting, Management Information, Business Technology & Finance, Taxation, Assurance, Business Law, and Information Technology.</p>
               </div>
               <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-1">
-                <strong className="text-gray-900 block font-bold text-sm">85 Verified Chapters</strong>
-                <p className="text-gray-600">Complete syllabus coverage mapped directly to the official ICAB curriculum structure.</p>
+                <strong className="text-gray-900 block font-bold text-sm">85 Syllabus-Aligned Chapters</strong>
+                <p className="text-gray-600">Chapter coverage is structured to align with the published ICAB Certificate Level syllabus.</p>
               </div>
               <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-1">
                 <strong className="text-gray-900 block font-bold text-sm">Deterministic Grading</strong>
@@ -86,6 +86,16 @@ export default async function AboutPage() {
                 <p className="text-gray-600">Every student receives a free exam token every Bangladesh local day, ensuring daily access to revision.</p>
               </div>
             </div>
+          </section>
+
+          <section className="space-y-3 pt-2 border-t border-gray-100">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-brand-red" />
+              Independent Educational Platform
+            </h2>
+            <p className="text-xs text-gray-600 leading-relaxed bg-gray-50 p-3.5 rounded-lg border border-gray-200">
+              Exam CAGO is an independent online learning and examination practice portal developed to support CA students in Bangladesh. Exam CAGO is not officially affiliated with, endorsed by, certified by, or owned by the Institute of Chartered Accountants of Bangladesh (ICAB).
+            </p>
           </section>
 
           <section className="space-y-3 pt-2 border-t border-gray-100">

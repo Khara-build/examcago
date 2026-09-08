@@ -141,47 +141,68 @@ export async function registerAction(formData: FormData) {
             referred_by: referrerUserId,
           });
 
-          // Insert Token Account with 1 welcome token
-          await adminClient.from('token_accounts').insert({
-            user_id: userId,
-            balance: 1,
-          });
+          // Check if token account already exists (e.g., created by database trigger)
+          const { data: existingTokenAcc } = await adminClient
+            .from('token_accounts')
+            .select('user_id')
+            .eq('user_id', userId)
+            .maybeSingle();
 
-          // Insert Welcome Bonus Transaction
-          await adminClient.from('token_transactions').insert({
-            user_id: userId,
-            amount: 1,
-            transaction_type: 'welcome_bonus',
-            description: 'Welcome bonus token on registration',
-          });
-
-          // Reward Referrer if valid
-          if (referrerUserId && referrerUserId !== userId) {
-            await adminClient.from('referrals').insert({
-              referrer_id: referrerUserId,
-              referred_id: userId,
-              reward_tokens: 1,
-              status: 'completed',
+          if (!existingTokenAcc) {
+            // Insert Token Account with 1 welcome token
+            await adminClient.from('token_accounts').insert({
+              user_id: userId,
+              balance: 1,
             });
 
-            const { data: refAcc } = await adminClient
-              .from('token_accounts')
-              .select('balance')
-              .eq('user_id', referrerUserId)
+            // Insert Welcome Bonus Transaction
+            await adminClient.from('token_transactions').insert({
+              user_id: userId,
+              amount: 1,
+              transaction_type: 'welcome_bonus',
+              description: 'Welcome bonus token on registration',
+            });
+          }
+
+          // Reward Referrer if valid and not already rewarded
+          if (referrerUserId && referrerUserId !== userId) {
+            const { data: existingRef } = await adminClient
+              .from('referrals')
+              .select('id')
+              .eq('referred_id', userId)
               .maybeSingle();
 
-            if (refAcc) {
-              await adminClient
-                .from('token_accounts')
-                .update({ balance: refAcc.balance + 1 })
-                .eq('user_id', referrerUserId);
+            if (!existingRef) {
+              await adminClient.from('referrals').insert({
+                referrer_id: referrerUserId,
+                referred_id: userId,
+                reward_tokens: 1,
+                status: 'completed',
+              });
 
+              // Record referral bonus transaction in ledger
               await adminClient.from('token_transactions').insert({
                 user_id: referrerUserId,
                 amount: 1,
                 transaction_type: 'referral_bonus',
                 description: `Bonus token for referring new student: ${email}`,
               });
+
+              // Authoritative balance derivation from ledger sum
+              const { data: refTxs } = await adminClient
+                .from('token_transactions')
+                .select('amount')
+                .eq('user_id', referrerUserId);
+
+              const newRefBalance = (refTxs || []).reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+              await adminClient
+                .from('token_accounts')
+                .upsert({
+                  user_id: referrerUserId,
+                  balance: Math.max(0, newRefBalance),
+                  updated_at: new Date().toISOString(),
+                });
             }
           }
         }
@@ -227,7 +248,7 @@ export async function requestPasswordResetAction(formData: FormData) {
 
   try {
     const supabase = await createClient();
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (process.env.NODE_ENV === 'production' ? 'https://examcago.com' : 'http://localhost:3000');
     const redirectTo = `${siteUrl}/auth/callback?next=/auth/reset-password`;
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {

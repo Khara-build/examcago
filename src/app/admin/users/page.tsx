@@ -12,7 +12,7 @@ export default async function AdminUsersPage() {
 
   const { data: users } = await adminClient
     .from('profiles')
-    .select('*, token_accounts(*)')
+    .select('*, token_accounts(*), token_transactions(amount)')
     .order('created_at', { ascending: false });
 
   return (
@@ -43,7 +43,11 @@ export default async function AdminUsersPage() {
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {users?.map((u: any) => {
-                const balance = u.token_accounts?.[0]?.balance ?? 0;
+                const tokenAccount = Array.isArray(u.token_accounts) ? u.token_accounts[0] : u.token_accounts;
+                const ledgerSum = Array.isArray(u.token_transactions)
+                  ? u.token_transactions.reduce((acc: number, tx: any) => acc + (Number(tx.amount) || 0), 0)
+                  : null;
+                const balance = ledgerSum !== null ? ledgerSum : (tokenAccount?.balance ?? 0);
                 return (
                   <tr key={u.id} className="hover:bg-gray-50">
                     <td className="p-4 font-bold text-gray-900">{u.full_name}</td>

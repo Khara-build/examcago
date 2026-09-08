@@ -58,7 +58,7 @@ export default async function ContactPage() {
               For general inquiries, account verification issues, or reporting question bank corrections:
             </p>
             <div className="p-3 bg-red-50/50 rounded border border-red-200 text-sm font-semibold text-brand-red">
-              support@examcago.com
+              support.cago@gmail.com
             </div>
             <p className="text-[11px] text-gray-500 flex items-center gap-1.5 pt-1">
               <Clock className="h-3.5 w-3.5 text-gray-400" />
