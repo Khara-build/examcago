@@ -86,6 +86,19 @@ export async function registerAction(formData: FormData) {
   }
 
   try {
+    const adminClient = createAdminClient();
+
+    // 1. Defense-in-depth: Pre-check if an account with this Gmail already exists
+    const { data: existingStudent } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (existingStudent) {
+      return { error: 'An account with this Gmail address already exists. Please sign in instead.' };
+    }
+
     const supabase = await createClient();
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (process.env.NODE_ENV === 'production' ? 'https://examcago.com' : 'http://localhost:3000');
     const { data, error } = await supabase.auth.signUp({
@@ -103,10 +116,15 @@ export async function registerAction(formData: FormData) {
 
     if (error) {
       console.error('[Auth SignUp Error]:', error.message);
-      if (error.message.toLowerCase().includes('user already registered')) {
+      if (error.message.toLowerCase().includes('user already registered') || error.message.toLowerCase().includes('already registered')) {
         return { error: 'An account with this Gmail address already exists. Please sign in instead.' };
       }
       return { error: error.message };
+    }
+
+    // 2. Detect duplicate account from Supabase Email Enumeration Protection response
+    if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
+      return { error: 'An account with this Gmail address already exists. Please sign in instead.' };
     }
 
     if (data?.user) {
@@ -229,27 +247,41 @@ export async function ensureUserProfileAndTokens({
   referralCode?: string;
 }) {
   const adminClient = createAdminClient();
-  const { data: existingProfile } = await adminClient
+
+  // 1. First look up the profile by user ID using safe parameterized .eq()
+  let { data: existingProfile } = await adminClient
     .from('profiles')
     .select('id, role')
     .eq('id', userId)
     .maybeSingle();
+
+  // 2. If not found by user ID, look up by email using safe parameterized .eq()
+  if (!existingProfile && email) {
+    const { data: profileByEmail } = await adminClient
+      .from('profiles')
+      .select('id, role')
+      .eq('email', email.toLowerCase().trim())
+      .maybeSingle();
+    if (profileByEmail) {
+      existingProfile = profileByEmail;
+    }
+  }
 
   if (existingProfile) {
     // Ensure token account exists even if profile already existed
     const { data: existingTokenAcc } = await adminClient
       .from('token_accounts')
       .select('user_id')
-      .eq('user_id', userId)
+      .eq('user_id', existingProfile.id)
       .maybeSingle();
 
     if (!existingTokenAcc) {
       await adminClient.from('token_accounts').insert({
-        user_id: userId,
+        user_id: existingProfile.id,
         balance: 1,
       });
       await adminClient.from('token_transactions').insert({
-        user_id: userId,
+        user_id: existingProfile.id,
         amount: 1,
         transaction_type: 'welcome_bonus',
         description: 'Welcome bonus token on registration',
