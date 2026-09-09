@@ -8,6 +8,7 @@ import { Footer } from '@/components/layout/Footer';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { loginAction } from '@/app/actions/auth';
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import { BookOpen, AlertCircle } from 'lucide-react';
 
 function LoginFormContent() {
@@ -74,6 +75,19 @@ function LoginFormContent() {
           <span>{error}</span>
         </div>
       )}
+
+      <div className="space-y-4">
+        <GoogleSignInButton 
+          redirectTo={redirectTo} 
+          onError={(err) => setError(err)} 
+        />
+
+        <div className="flex items-center gap-3 my-2">
+          <div className="h-px flex-1 bg-gray-200" />
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">OR</span>
+          <div className="h-px flex-1 bg-gray-200" />
+        </div>
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>

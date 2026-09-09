@@ -16,7 +16,9 @@ import {
   ShieldCheck, 
   Coins, 
   Zap, 
-  Users 
+  Users,
+  Mail,
+  Megaphone
 } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -68,7 +70,7 @@ export default async function HomePage() {
       <Navbar user={user ? { email: user.email!, role: userRole } : null} tokens={tokenBalance} />
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-white border-b border-gray-200 py-16 sm:py-24">
+      <section className="relative overflow-hidden bg-white border-b border-gray-200 py-10 sm:py-14">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             <div className="lg:col-span-7 space-y-6">
@@ -176,8 +178,65 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* Sponsor / Advertising Banner */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="relative overflow-hidden rounded-2xl border border-red-200/90 bg-gradient-to-r from-red-50/80 via-amber-50/40 to-white p-5 sm:p-7 shadow-xs flex flex-col md:flex-row items-center justify-between gap-6 min-h-[140px] sm:min-h-[150px]">
+          {/* Left Column: Content & CTA */}
+          <div className="flex-1 space-y-2.5 text-left w-full md:w-auto">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-brand-red bg-red-100/90 border border-red-200 px-2.5 py-0.5 rounded-sm shadow-2xs">
+                PARTNER WITH US
+              </span>
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 tracking-tight">
+                Advertise with Exam CAGO
+              </h3>
+            </div>
+            <p className="text-xs sm:text-sm text-gray-600 leading-relaxed max-w-xl">
+              Reach ICAB Certificate Level students and showcase your brand, products or services.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <a
+                href="mailto:support.cago@gmail.com"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-brand-red text-white text-xs font-semibold hover:bg-brand-red-light transition-colors shadow-xs"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                <span>Interested? Contact us</span>
+              </a>
+              <a
+                href="mailto:support.cago@gmail.com"
+                className="text-xs text-gray-500 hover:text-brand-red transition-colors font-medium"
+              >
+                support.cago@gmail.com
+              </a>
+            </div>
+          </div>
+
+          {/* Middle: Promotional Megaphone Visual */}
+          <div className="hidden lg:flex items-center justify-center shrink-0 px-2">
+            <div className="w-14 h-14 rounded-full bg-red-100/70 border border-red-200/80 flex items-center justify-center text-brand-red shadow-2xs">
+              <Megaphone className="h-6 w-6" />
+            </div>
+          </div>
+
+          {/* Right Column: Prominent Brand Ad Placeholder */}
+          <div className="w-full md:w-auto flex justify-center md:justify-end shrink-0">
+            <div className="w-full sm:w-60 md:w-64 lg:w-72 h-28 sm:h-32 rounded-xl border-2 border-dashed border-red-300/90 bg-white/95 px-5 py-4 flex flex-col items-center justify-center text-center shadow-xs">
+              <div className="text-xs sm:text-sm font-extrabold tracking-widest text-brand-red uppercase">
+                YOUR BRAND
+              </div>
+              <div className="text-[11px] sm:text-xs font-bold text-gray-400 tracking-wider mt-0.5">
+                AD HERE
+              </div>
+              <span className="text-[10px] text-gray-400 mt-1 font-medium">
+                Featured Sponsor Placement
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 7 ICAB Subjects Section */}
-      <section className="py-16 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      <section className="pt-6 sm:pt-8 pb-16 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto space-y-3 mb-12">
           <Badge variant="brand">Syllabus Coverage</Badge>
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">

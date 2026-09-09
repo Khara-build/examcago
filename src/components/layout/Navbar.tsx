@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { BookOpen, Coins, User, LogOut, Menu, X, Shield, History } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/BrandLogo';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { logoutAction } from '@/app/actions/auth';
@@ -30,7 +31,7 @@ export function Navbar({ user, tokens = 0, onLogout }: NavbarProps) {
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="flex h-10 w-10 items-center justify-center rounded-md bg-brand-red text-white shadow-sm transition-transform group-hover:scale-105">
-              <BookOpen className="h-5 w-5" />
+              <BrandLogo className="h-5 w-5" />
             </div>
             <div className="flex flex-col">
               <span className="text-xl font-bold tracking-tight text-brand-red">

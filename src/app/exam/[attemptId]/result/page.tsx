@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { evaluateExamAttempt, isExactNumericMatch } from '@/lib/exam/grading';
+import { QuestionReportButton } from './QuestionReportButton';
 import { CheckCircle2, XCircle, RotateCcw, HelpCircle, FileText, Check, AlertCircle } from 'lucide-react';
 import { Metadata } from 'next';
 
@@ -109,6 +110,14 @@ export default async function ExamResultPage({ params }: ResultPageProps) {
     fullDbScenarios,
     fullDbLarge
   );
+
+  // Fetch already submitted reports for this student on this attempt
+  const { data: userReports } = await adminClient
+    .from('question_reports')
+    .select('question_id')
+    .eq('attempt_id', attemptId)
+    .eq('user_id', user.id);
+  const reportedQuestionIdSet = new Set((userReports || []).map((r) => r.question_id));
 
   const displayScore = attempt.score !== null && attempt.score !== undefined ? attempt.score : evaluation.totalScore;
   const displayMarks = attempt.total_marks || evaluation.totalMarks;
@@ -415,6 +424,14 @@ export default async function ExamResultPage({ params }: ResultPageProps) {
                       <p className="leading-relaxed">{qSnapshot.explanation}</p>
                     </div>
                   )}
+
+                  {/* Post-Exam Question Reporting */}
+                  <QuestionReportButton
+                    questionId={qItem.question_id}
+                    attemptId={attemptId}
+                    questionNumber={idx + 1}
+                    initialReported={reportedQuestionIdSet.has(qItem.question_id)}
+                  />
                 </Card>
               );
             })}

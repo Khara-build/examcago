@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
+import { sendWelcomeEmail } from '@/lib/email';
 
 function isRedirectError(err: any): boolean {
   return typeof err?.digest === 'string' && err.digest.startsWith('NEXT_REDIRECT');
@@ -111,101 +112,12 @@ export async function registerAction(formData: FormData) {
 
       // Resilient Fallback: Ensure profile & token account exist in case DB trigger is missing/pending
       try {
-        const adminClient = createAdminClient();
-        const { data: existingProfile } = await adminClient
-          .from('profiles')
-          .select('id')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (!existingProfile) {
-          const generatedRefCode = 'CAGO-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-          
-          let referrerUserId: string | null = null;
-          if (referralCode) {
-            const { data: refUser } = await adminClient
-              .from('profiles')
-              .select('id')
-              .eq('referral_code', referralCode)
-              .maybeSingle();
-            if (refUser) referrerUserId = refUser.id;
-          }
-
-          // Insert Profile
-          await adminClient.from('profiles').insert({
-            id: userId,
-            email: email,
-            full_name: fullName || email.split('@')[0],
-            role: 'student',
-            referral_code: generatedRefCode,
-            referred_by: referrerUserId,
-          });
-
-          // Check if token account already exists (e.g., created by database trigger)
-          const { data: existingTokenAcc } = await adminClient
-            .from('token_accounts')
-            .select('user_id')
-            .eq('user_id', userId)
-            .maybeSingle();
-
-          if (!existingTokenAcc) {
-            // Insert Token Account with 1 welcome token
-            await adminClient.from('token_accounts').insert({
-              user_id: userId,
-              balance: 1,
-            });
-
-            // Insert Welcome Bonus Transaction
-            await adminClient.from('token_transactions').insert({
-              user_id: userId,
-              amount: 1,
-              transaction_type: 'welcome_bonus',
-              description: 'Welcome bonus token on registration',
-            });
-          }
-
-          // Reward Referrer if valid and not already rewarded
-          if (referrerUserId && referrerUserId !== userId) {
-            const { data: existingRef } = await adminClient
-              .from('referrals')
-              .select('id')
-              .eq('referred_id', userId)
-              .maybeSingle();
-
-            if (!existingRef) {
-              await adminClient.from('referrals').insert({
-                referrer_id: referrerUserId,
-                referred_id: userId,
-                reward_tokens: 1,
-                status: 'completed',
-              });
-
-              // Record referral bonus transaction in ledger
-              await adminClient.from('token_transactions').insert({
-                user_id: referrerUserId,
-                amount: 1,
-                transaction_type: 'referral_bonus',
-                description: `Bonus token for referring new student: ${email}`,
-              });
-
-              // Authoritative balance derivation from ledger sum
-              const { data: refTxs } = await adminClient
-                .from('token_transactions')
-                .select('amount')
-                .eq('user_id', referrerUserId);
-
-              const newRefBalance = (refTxs || []).reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
-
-              await adminClient
-                .from('token_accounts')
-                .upsert({
-                  user_id: referrerUserId,
-                  balance: Math.max(0, newRefBalance),
-                  updated_at: new Date().toISOString(),
-                });
-            }
-          }
-        }
+        await ensureUserProfileAndTokens({
+          userId,
+          email,
+          fullName: fullName || email.split('@')[0],
+          referralCode,
+        });
       } catch (profileErr) {
         console.warn('[Profile Fallback Warning]:', profileErr);
       }
@@ -301,5 +213,139 @@ export async function updatePasswordAction(formData: FormData) {
     console.error('[Auth Update Password Exception]:', err);
     return { error: 'Failed to update password. Please try again.' };
   }
+}
+
+export async function ensureUserProfileAndTokens({
+  userId,
+  email,
+  fullName,
+  referralCode,
+}: {
+  userId: string;
+  email: string;
+  fullName?: string;
+  referralCode?: string;
+}) {
+  const adminClient = createAdminClient();
+  const { data: existingProfile } = await adminClient
+    .from('profiles')
+    .select('id, role')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (existingProfile) {
+    // Ensure token account exists even if profile already existed
+    const { data: existingTokenAcc } = await adminClient
+      .from('token_accounts')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!existingTokenAcc) {
+      await adminClient.from('token_accounts').insert({
+        user_id: userId,
+        balance: 1,
+      });
+      await adminClient.from('token_transactions').insert({
+        user_id: userId,
+        amount: 1,
+        transaction_type: 'welcome_bonus',
+        description: 'Welcome bonus token on registration',
+      });
+    }
+
+    return { profile: existingProfile, isNew: false };
+  }
+
+  // Profile does not exist: create it cleanly
+  const generatedRefCode = 'CAGO-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+  
+  let referrerUserId: string | null = null;
+  if (referralCode) {
+    const { data: refUser } = await adminClient
+      .from('profiles')
+      .select('id')
+      .eq('referral_code', referralCode)
+      .maybeSingle();
+    if (refUser) referrerUserId = refUser.id;
+  }
+
+  const { data: newProfile, error: profileInsertError } = await adminClient
+    .from('profiles')
+    .insert({
+      id: userId,
+      email: email,
+      full_name: fullName || email.split('@')[0],
+      role: 'student',
+      referral_code: generatedRefCode,
+      referred_by: referrerUserId,
+    })
+    .select('id, role')
+    .single();
+
+  if (profileInsertError) {
+    console.warn('[ensureUserProfileAndTokens Insert Error]:', profileInsertError.message);
+  }
+
+  // Provision token account
+  const { data: existingTokenAcc } = await adminClient
+    .from('token_accounts')
+    .select('user_id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!existingTokenAcc) {
+    await adminClient.from('token_accounts').insert({
+      user_id: userId,
+      balance: 1,
+    });
+    await adminClient.from('token_transactions').insert({
+      user_id: userId,
+      amount: 1,
+      transaction_type: 'welcome_bonus',
+      description: 'Welcome bonus token on registration',
+    });
+  }
+
+  // Reward Referrer if valid
+  if (referrerUserId && referrerUserId !== userId) {
+    const { data: existingRef } = await adminClient
+      .from('referrals')
+      .select('id')
+      .eq('referred_id', userId)
+      .maybeSingle();
+
+    if (!existingRef) {
+      await adminClient.from('referrals').insert({
+        referrer_id: referrerUserId,
+        referred_id: userId,
+        reward_tokens: 1,
+        status: 'completed',
+      });
+      await adminClient.from('token_transactions').insert({
+        user_id: referrerUserId,
+        amount: 1,
+        transaction_type: 'referral_bonus',
+        description: `Bonus token for referring new student: ${email}`,
+      });
+      const { data: refTxs } = await adminClient
+        .from('token_transactions')
+        .select('amount')
+        .eq('user_id', referrerUserId);
+      const newRefBalance = (refTxs || []).reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+      await adminClient.from('token_accounts').upsert({
+        user_id: referrerUserId,
+        balance: Math.max(0, newRefBalance),
+        updated_at: new Date().toISOString(),
+      });
+    }
+  }
+
+  // Dispatch Welcome Email asynchronously without blocking
+  sendWelcomeEmail({ to: email, name: fullName }).catch((e) => {
+    console.warn('[Welcome Email Non-blocking Error]:', e);
+  });
+
+  return { profile: newProfile || { id: userId, role: 'student' }, isNew: true };
 }
 

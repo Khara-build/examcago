@@ -16,7 +16,8 @@ import {
   Coins, 
   Share2, 
   Database,
-  ArrowLeft
+  ArrowLeft,
+  Flag
 } from 'lucide-react';
 
 export const metadata: Metadata = {
@@ -53,6 +54,7 @@ export default async function AdminLayout({
     { name: 'Subjects', href: '/admin/subjects', icon: BookOpen },
     { name: 'Chapters', href: '/admin/chapters', icon: Layers },
     { name: 'Question Bank', href: '/admin/questions', icon: HelpCircle },
+    { name: 'Question Reports', href: '/admin/questions/reports', icon: Flag },
     { name: 'MCQ Bulk Import', href: '/admin/questions/import', icon: Upload },
     { name: 'Special Questions', href: '/admin/questions/special', icon: FileText },
     { name: 'Special Bulk Import', href: '/admin/questions/special/import', icon: Upload },
